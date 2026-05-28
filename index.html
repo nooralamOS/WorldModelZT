@@ -1,0 +1,602 @@
+<!DOCTYPE html>
+<html lang="en">
+<!-- Serve with: npx serve . (from project root) -->
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>World Models — A Deep Dive</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700;900&display=swap" rel="stylesheet" />
+  <script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/gsap.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/ScrollTrigger.min.js"></script>
+
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root { --blue: #0127ff; }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      font-family: 'Inter', system-ui, sans-serif;
+      background: var(--blue);
+      color: #fff;
+      overflow-x: hidden;
+    }
+
+    #three-canvas {
+      position: fixed;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+      z-index: 1;
+    }
+
+    /* ── Hero ─────────────────────────────────────────────── */
+    #hero {
+      position: relative;
+      height: 260vh;
+      z-index: 2;
+    }
+
+    #hero-inner {
+      position: sticky;
+      top: 0;
+      height: 100vh;
+      width: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      pointer-events: none;
+    }
+
+    /* Title starts hidden; GSAP always reveals it during scroll */
+    #title-wrap {
+      text-align: center;
+      opacity: 0;
+      transform: translateY(60px);
+    }
+
+    #title-wrap h1 {
+      font-size: clamp(3.5rem, 11vw, 9rem);
+      font-weight: 900;
+      line-height: 0.95;
+      letter-spacing: -0.04em;
+      color: #fff;
+    }
+
+    #o-target {
+      display: inline-block;
+      color: transparent;
+      -webkit-text-stroke: 3px #fff;
+    }
+
+    .subtitle {
+      margin-top: 1.25rem;
+      font-size: clamp(0.875rem, 1.5vw, 1.125rem);
+      font-weight: 400;
+      color: rgba(255,255,255,0.72);
+      max-width: 44ch;
+      margin-inline: auto;
+      line-height: 1.6;
+    }
+
+    /* Persistent scroll cue */
+    #scroll-cue {
+      position: absolute;
+      bottom: 2.5rem;
+      left: 50%;
+      transform: translateX(-50%);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 0.5rem;
+      font-size: 0.6875rem;
+      font-weight: 700;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: rgba(255,255,255,0.45);
+      pointer-events: none;
+    }
+
+    #scroll-cue .chevron {
+      width: 10px;
+      height: 10px;
+      border-right: 1.5px solid rgba(255,255,255,0.45);
+      border-bottom: 1.5px solid rgba(255,255,255,0.45);
+      transform: rotate(45deg);
+      animation: cue-bob 1.6s ease-in-out infinite;
+    }
+
+    @keyframes cue-bob {
+      0%, 100% { transform: rotate(45deg) translateY(0); opacity: 0.45; }
+      50%       { transform: rotate(45deg) translateY(4px); opacity: 0.9; }
+    }
+
+    /* ── Article ─────────────────────────────────────────── */
+    #article-section {
+      position: relative;
+      z-index: 3;
+      background: #fff;
+      color: #111;
+    }
+
+    .site-nav {
+      position: sticky;
+      top: 0;
+      z-index: 10;
+      background: rgba(255,255,255,0.92);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border-bottom: 1px solid #e5e5e5;
+      padding: 0 2rem;
+      height: 56px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .site-nav .logo {
+      font-weight: 900;
+      font-size: 1rem;
+      letter-spacing: -0.02em;
+      color: var(--blue);
+    }
+
+    .site-nav ul {
+      list-style: none;
+      display: flex;
+      gap: 2rem;
+    }
+
+    .site-nav ul li a {
+      font-size: 0.875rem;
+      color: #555;
+      text-decoration: none;
+      transition: color 0.15s;
+    }
+
+    .site-nav ul li a:hover { color: var(--blue); }
+
+    .article-layout {
+      max-width: 1160px;
+      margin: 0 auto;
+      padding: 4rem 2rem 8rem;
+      display: grid;
+      grid-template-columns: 210px 1fr;
+      gap: 5rem;
+    }
+
+    @media (max-width: 768px) {
+      .article-layout { grid-template-columns: 1fr; gap: 2rem; }
+      .toc { display: none; }
+    }
+
+    .toc {
+      position: sticky;
+      top: calc(56px + 2rem);
+      height: fit-content;
+    }
+
+    .toc-label {
+      font-size: 0.6875rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      color: #aaa;
+      margin-bottom: 0.875rem;
+    }
+
+    .toc ul { list-style: none; }
+
+    .toc ul li {
+      border-left: 2px solid #eee;
+      padding-left: 0.875rem;
+      margin-bottom: 0.5rem;
+    }
+
+    .toc ul li a {
+      font-size: 0.8125rem;
+      line-height: 1.4;
+      color: #777;
+      text-decoration: none;
+      display: block;
+      transition: color 0.15s;
+    }
+
+    .toc ul li a:hover { color: var(--blue); }
+
+    .article-body { min-width: 0; }
+
+    .eyebrow {
+      font-size: 0.75rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: var(--blue);
+      margin-bottom: 1rem;
+    }
+
+    .article-title {
+      font-size: clamp(2rem, 3.5vw, 2.75rem);
+      font-weight: 900;
+      line-height: 1.1;
+      letter-spacing: -0.03em;
+      margin-bottom: 1.5rem;
+      color: #0a0a0a;
+    }
+
+    .lede {
+      font-size: 1.1875rem;
+      color: #444;
+      line-height: 1.65;
+      margin-bottom: 3rem;
+      max-width: 60ch;
+      border-bottom: 1px solid #e5e5e5;
+      padding-bottom: 3rem;
+    }
+
+    .article-body h2 {
+      font-size: 1.4375rem;
+      font-weight: 700;
+      letter-spacing: -0.025em;
+      margin-top: 3rem;
+      margin-bottom: 0.875rem;
+      color: #0a0a0a;
+      scroll-margin-top: calc(56px + 1.5rem);
+    }
+
+    .article-body p {
+      font-size: 1.0625rem;
+      line-height: 1.78;
+      color: #3a3a3a;
+      margin-bottom: 1.25rem;
+      max-width: 62ch;
+    }
+
+    .article-body blockquote {
+      border-left: 3px solid var(--blue);
+      margin: 2rem 0;
+      padding: 0.25rem 0 0.25rem 1.5rem;
+    }
+
+    .article-body blockquote p {
+      font-size: 1.125rem;
+      font-style: italic;
+      color: #555;
+    }
+  </style>
+
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+    }
+  }
+  </script>
+</head>
+
+<body>
+  <canvas id="three-canvas"></canvas>
+
+  <section id="hero">
+    <div id="hero-inner">
+      <div id="title-wrap">
+        <h1>World&nbsp;M<span id="o-target">o</span>dels</h1>
+        <p class="subtitle">An exploration of how AI systems learn to simulate reality — and what that means for the future of intelligence.</p>
+      </div>
+      <div id="scroll-cue">
+        <span>Scroll</span>
+        <div class="chevron"></div>
+      </div>
+    </div>
+  </section>
+
+  <section id="article-section">
+    <nav class="site-nav">
+      <span class="logo">World Models</span>
+      <ul>
+        <li><a href="#what">What</a></li>
+        <li><a href="#perception">Perception</a></li>
+        <li><a href="#planning">Planning</a></li>
+        <li><a href="#llms">LLMs</a></li>
+        <li><a href="#future">Future</a></li>
+      </ul>
+    </nav>
+
+    <div class="article-layout">
+      <nav class="toc">
+        <p class="toc-label">On this page</p>
+        <ul>
+          <li><a href="#intro">Introduction</a></li>
+          <li><a href="#what">What Are World Models?</a></li>
+          <li><a href="#perception">Perception &amp; Prediction</a></li>
+          <li><a href="#planning">Planning &amp; Agency</a></li>
+          <li><a href="#llms">LLMs as World Models</a></li>
+          <li><a href="#future">The Road Ahead</a></li>
+        </ul>
+      </nav>
+
+      <div class="article-body">
+        <p class="eyebrow">Deep Dive</p>
+        <h1 class="article-title" id="intro">What Would It Mean for an AI to Understand the World?</h1>
+        <p class="lede">World models represent one of the most compelling frontiers in artificial intelligence — the idea that a system can build an internal representation of its environment rich enough to simulate, predict, and plan. This is the story of what that means, why it matters, and where we are.</p>
+
+        <h2 id="what">What Are World Models?</h2>
+        <p>The term "world model" has roots in Jürgen Schmidhuber's foundational work in the 1990s. The core insight: an agent that maintains an internal model of its environment can reason about actions and their consequences without having to experience them directly.</p>
+        <p>Unlike reactive systems that map perception directly to action, world-model-equipped agents maintain a compressed, dynamic understanding of their surroundings. This enables counterfactual reasoning — imagining futures that haven't happened yet.</p>
+        <blockquote><p>A good world model is a learned simulator: given a state and an action, it predicts the next state, capturing physics, social dynamics, causality, and the long tail of rare events.</p></blockquote>
+        <p>Ha &amp; Schmidhuber's 2018 paper showed that an agent could learn to play entire games inside a hallucinated dream environment — its world model good enough to substitute for reality during training. That demonstration crystallized the field.</p>
+
+        <h2 id="perception">Perception &amp; Prediction</h2>
+        <p>Modern world models use encoder-decoder architectures to compress high-dimensional sensory input — pixels, audio, text — into a compact latent state. Recurrent or transformer-based transition models then propagate this state forward in time.</p>
+        <p>Dreamer, RSSM, and similar systems demonstrated that agents trained entirely in latent space can match or exceed those trained in raw pixel space. The key insight: you don't need to imagine the full sensory world, only the features relevant to planning.</p>
+        <p>Multi-step prediction is where world models earn their keep. A system that can accurately forecast 100 steps into the future can plan through complex, multi-stage tasks that are intractable for reactive systems.</p>
+
+        <h2 id="planning">Planning &amp; Agency</h2>
+        <p>Once an agent has a world model, planning becomes tractable through imagination: roll out candidate action sequences, evaluate outcomes under a reward signal, execute the best plan. Model-predictive control at neural scale.</p>
+        <p>The challenge is that small errors compound. A model 99% accurate per step is only 37% accurate after 100 steps. This forces world models to be either very accurate or very short-horizon — both are hard constraints.</p>
+        <p>Recent work on uncertainty-aware models addresses this: by explicitly representing what the model doesn't know, agents decide when to trust imagination and when to gather more information from the real environment.</p>
+
+        <h2 id="llms">LLMs as World Models</h2>
+        <p>Large language models exhibit emergent world-modeling capabilities — maintaining entity states, tracking causality across long documents, simulating social dynamics. A model that can answer "what happens if I drop this?" has some implicit model of physics.</p>
+        <p>Whether this constitutes "true" world modeling or sophisticated pattern matching remains actively debated. But the practical capability is real: LLMs can simulate environments, reason about hypotheticals, and generate consistent counterfactual histories.</p>
+        <blockquote><p>The question isn't whether language models have world models. It's whether those models are accurate, consistent, and generalizable enough to support reliable reasoning.</p></blockquote>
+
+        <h2 id="future">The Road Ahead</h2>
+        <p>The convergence of multimodal perception, scalable architectures, and reinforcement learning from human feedback points toward world models spanning language, vision, and action — the substrate for genuinely general AI systems.</p>
+        <p>Key open problems: sample efficiency (humans learn world models from very little data), compositionality (combining known concepts to model novel situations), and causal understanding (mechanism, not just correlation).</p>
+        <p>The most ambitious vision is an AI that builds and continuously refines a model of the entire physical and social world — not a lookup table of facts, but a living simulation that can answer any counterfactual question. We are, for the first time, clearly pointed in the right direction.</p>
+      </div>
+    </div>
+  </section>
+
+  <script type="module">
+    import * as THREE from 'three';
+    import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+
+    // ── Guard: confirm module loaded ──────────────────────────
+    console.log('[WorldModels] Three.js module loaded', THREE.REVISION);
+    gsap.registerPlugin(ScrollTrigger);
+
+    // ── Renderer ──────────────────────────────────────────────
+    const canvas  = document.getElementById('three-canvas');
+    const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setClearColor(0x000000, 0);
+
+    // ── Scene / Camera ─────────────────────────────────────────
+    const scene  = new THREE.Scene();
+    const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 100);
+    camera.position.set(0, 0, 5);
+
+    // ── Paint mask (UV-space, 512×512) ─────────────────────────
+    const MASK_SZ  = 512;
+    const maskCanvas = document.createElement('canvas');
+    maskCanvas.width = maskCanvas.height = MASK_SZ;
+    const maskCtx = maskCanvas.getContext('2d');
+    maskCtx.fillStyle = '#000';
+    maskCtx.fillRect(0, 0, MASK_SZ, MASK_SZ);
+    const maskTex = new THREE.CanvasTexture(maskCanvas);
+
+    // ── Shaders ────────────────────────────────────────────────
+    const VERT_PTS = /* glsl */`
+      uniform float uScale;
+      varying vec2  vUv;
+      void main() {
+        vUv = uv;
+        gl_PointSize = max(1.0, 1.2 + 3.5 * uScale);
+        gl_Position  = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+      }
+    `;
+    const FRAG_PTS = /* glsl */`
+      uniform sampler2D uMask;
+      varying vec2 vUv;
+      void main() {
+        float mask = texture2D(uMask, vUv).r;
+        gl_FragColor = vec4(1.0, 1.0, 1.0, 1.0 - mask);
+      }
+    `;
+    const VERT_MESH = /* glsl */`
+      varying vec2 vUv;
+      void main() {
+        vUv = uv;
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+      }
+    `;
+    const FRAG_MESH = /* glsl */`
+      uniform sampler2D uTex;
+      uniform sampler2D uMask;
+      varying vec2 vUv;
+      void main() {
+        vec4  tex  = texture2D(uTex,  vUv);
+        float mask = texture2D(uMask, vUv).r;
+        gl_FragColor = vec4(tex.rgb, mask);
+      }
+    `;
+
+    // ── Earth group ────────────────────────────────────────────
+    const earthGroup = new THREE.Group();
+    scene.add(earthGroup);
+
+    let earthMesh   = null;
+    let pointsMat   = null;
+
+    // Earth is a unit sphere (confirmed from GLTF accessor bounds)
+    const SPHERE_RADIUS = 1.0;
+    const halfH = Math.tan((45 / 2) * Math.PI / 180) * camera.position.z; // ≈ 2.07
+    const initialScale  = (halfH * 0.65) / SPHERE_RADIUS;                  // ≈ 1.35
+    earthGroup.scale.setScalar(initialScale);
+
+    // ── Fallback sphere (always visible immediately) ───────────
+    // Replaced later by the real GLTF geometry when that loads.
+    const fallbackGeo = new THREE.SphereGeometry(SPHERE_RADIUS, 64, 32);
+
+    pointsMat = new THREE.ShaderMaterial({
+      vertexShader:   VERT_PTS,
+      fragmentShader: FRAG_PTS,
+      uniforms: {
+        uMask:  { value: maskTex },
+        uScale: { value: initialScale },
+      },
+      transparent: true,
+      depthWrite:  false,
+    });
+
+    const fallbackPts = new THREE.Points(fallbackGeo, pointsMat);
+    fallbackPts.renderOrder = 0;
+    earthGroup.add(fallbackPts);
+
+    // ── GSAP scroll animation (runs immediately, no GLTF dep) ──
+    setupGSAP();
+
+    // ── Load real GLTF Earth (enhances the experience) ─────────
+    new GLTFLoader().load(
+      './earth_sketchfab/scene.gltf',
+      (gltf) => {
+        let geo = null;
+        gltf.scene.traverse((child) => { if (child.isMesh && !geo) geo = child.geometry; });
+        if (!geo) return;
+
+        // Center geometry (the GLTF Earth is already a unit sphere at origin)
+        geo.computeBoundingSphere();
+        const c = geo.boundingSphere.center;
+        geo.translate(-c.x, -c.y, -c.z);
+
+        // Swap fallback → real geometry
+        earthGroup.clear();
+
+        const realPts = new THREE.Points(geo, pointsMat);
+        realPts.renderOrder = 0;
+        earthGroup.add(realPts);
+
+        const diffuse = new THREE.TextureLoader().load(
+          './earth_sketchfab/textures/Material.002_diffuse.jpeg'
+        );
+        diffuse.colorSpace = THREE.SRGBColorSpace;
+
+        const meshMat = new THREE.ShaderMaterial({
+          vertexShader:   VERT_MESH,
+          fragmentShader: FRAG_MESH,
+          uniforms: { uTex: { value: diffuse }, uMask: { value: maskTex } },
+          transparent: true,
+          depthWrite:  false,
+          depthTest:   false,
+        });
+        earthMesh = new THREE.Mesh(geo, meshMat);
+        earthMesh.renderOrder = 1;
+        earthGroup.add(earthMesh);
+
+        console.log('[WorldModels] GLTF Earth loaded — texture reveal active');
+      },
+      undefined,
+      (err) => console.warn('[WorldModels] GLTF load failed (serve with npx serve .):', err)
+    );
+
+    // ── GSAP ───────────────────────────────────────────────────
+    function setupGSAP() {
+      const oSpan     = document.getElementById('o-target');
+      const titleWrap = document.getElementById('title-wrap');
+
+      // Measure O at natural layout position (before any GSAP transforms)
+      const oRect = oSpan.getBoundingClientRect();
+      const oCx   = oRect.left + oRect.width  / 2;
+      const oCy   = oRect.top  + oRect.height / 2;
+
+      // O center → world position on the z = 0 plane
+      const ndc = new THREE.Vector3(
+        (oCx / window.innerWidth)   * 2 - 1,
+        -(oCy / window.innerHeight) * 2 + 1,
+        0.5
+      );
+      ndc.unproject(camera);
+      const dir   = ndc.sub(camera.position).normalize();
+      const t     = -camera.position.z / dir.z;
+      const oWorld = camera.position.clone().addScaledVector(dir, t);
+
+      // Earth projected height in pixels at initialScale
+      const projectY = (wy) => {
+        const v = new THREE.Vector3(0, wy, 0).project(camera);
+        return (-v.y * 0.5 + 0.5) * window.innerHeight;
+      };
+      const earthPxH  = projectY(-SPHERE_RADIUS * initialScale) - projectY(SPHERE_RADIUS * initialScale);
+      const targetScale = initialScale * (oRect.height * 0.9) / earthPxH;
+
+      // Fade scroll cue out as soon as user starts scrolling
+      gsap.to('#scroll-cue', {
+        opacity: 0,
+        scrollTrigger: { trigger: '#hero', start: 'top top', end: '8% top', scrub: true },
+      });
+
+      const tl = gsap.timeline({
+        scrollTrigger: {
+          trigger: '#hero',
+          start:   'top top',
+          end:     'bottom bottom',
+          scrub:   1.2,
+        },
+      });
+
+      tl.to(earthGroup.position, { x: oWorld.x, y: oWorld.y, duration: 1 }, 0)
+        .to(earthGroup.scale,    { x: targetScale, y: targetScale, z: targetScale, duration: 1 }, 0)
+        .to(titleWrap,           { y: 0, opacity: 1, duration: 0.65, ease: 'power2.out' }, 0.28);
+    }
+
+    // ── Raycast & paint ────────────────────────────────────────
+    const raycaster = new THREE.Raycaster();
+    const mouse     = new THREE.Vector2();
+
+    window.addEventListener('mousemove', (e) => {
+      if (!earthMesh) return;
+      mouse.set(
+        (e.clientX / window.innerWidth)   * 2 - 1,
+        -(e.clientY / window.innerHeight) * 2 + 1
+      );
+      raycaster.setFromCamera(mouse, camera);
+      const hits = raycaster.intersectObject(earthMesh);
+      if (hits.length && hits[0].uv) paint(hits[0].uv.x, hits[0].uv.y);
+    });
+
+    function paint(u, v) {
+      const x = u * MASK_SZ;
+      const y = (1 - v) * MASK_SZ;
+      const r = 26;
+
+      const stroke = (px, py) => {
+        const g = maskCtx.createRadialGradient(px, py, 0, px, py, r);
+        g.addColorStop(0, 'rgba(255,255,255,0.13)');
+        g.addColorStop(1, 'rgba(255,255,255,0)');
+        maskCtx.fillStyle = g;
+        maskCtx.fillRect(px - r, py - r, r * 2, r * 2);
+      };
+
+      stroke(x, y);
+      if (u < 0.08) stroke(x + MASK_SZ, y);
+      if (u > 0.92) stroke(x - MASK_SZ, y);
+
+      maskTex.needsUpdate = true;
+    }
+
+    // ── Render loop ────────────────────────────────────────────
+    const clock = new THREE.Clock();
+
+    (function loop() {
+      requestAnimationFrame(loop);
+      earthGroup.rotation.y += clock.getDelta() * 0.08;
+      if (pointsMat) pointsMat.uniforms.uScale.value = earthGroup.scale.x;
+      renderer.render(scene, camera);
+    })();
+
+    // ── Resize ─────────────────────────────────────────────────
+    window.addEventListener('resize', () => {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+  </script>
+</body>
+</html>
