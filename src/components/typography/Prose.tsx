@@ -15,11 +15,15 @@ export function Prose({ children, className, as: Tag = "article" }: ProseProps) 
 type DisplayTitleProps = {
   children: React.ReactNode;
   className?: string;
+  id?: string;
+  style?: React.CSSProperties;
 };
 
-export function DisplayTitle({ children, className }: DisplayTitleProps) {
+export function DisplayTitle({ children, className, id, style }: DisplayTitleProps) {
   return (
     <h1
+      id={id}
+      style={style}
       className={cn(
         "font-display text-[clamp(2.5rem,6vw,4.25rem)] font-semibold leading-[1.05] tracking-[-0.03em] text-ink",
         className,

@@ -1,5 +1,6 @@
 import { ArticleSection } from "@/components/article/ArticleSection";
 import { ContentBlocks } from "@/components/article/ContentBlocks";
+import { EarthScrollStage } from "@/components/layout/EarthScrollStage";
 import { Hero } from "@/components/layout/Hero";
 import { SiteFooter } from "@/components/layout/SiteFooter";
 import { SiteNav } from "@/components/layout/SiteNav";
@@ -18,44 +19,44 @@ export default function HomePage() {
         "--nav-item-padding-x": "0.8rem",
       } as React.CSSProperties}
     >
-      <SiteNav items={toc} />
-
-      <div id="top" className="mx-auto max-w-content px-6 sm:px-8 lg:px-12">
-        <div 
-          className="min-[1060px]:grid"
-          style={{
-            gridTemplateColumns: "minmax(0, 16rem) minmax(0, 1fr)",
-            gap: "3.8rem",
-          }}
-        >
-          <div className="hidden min-[1060px]:block">
-            <TableOfContents items={toc} />
-          </div>
-
-          <main className="min-w-0 pb-8">
-            <Hero meta={article} />
-
-            <div className="min-[1060px]:hidden">
+      <EarthScrollStage nav={<SiteNav items={toc} />}>
+        <div id="top" className="mx-auto max-w-content px-6 sm:px-8 lg:px-12">
+          <div
+            className="min-[1060px]:grid"
+            style={{
+              gridTemplateColumns: "minmax(0, 16rem) minmax(0, 1fr)",
+              gap: "3.8rem",
+            }}
+          >
+            <div className="hidden min-[1060px]:block">
               <TableOfContents items={toc} />
             </div>
 
-            <section id="intro" className="scroll-mt-28 pt-8 sm:pt-10">
-              <header className="mb-10 max-w-article">
-                <SubsectionTitle id="intro-title">Introduction</SubsectionTitle>
-              </header>
-              <div className="max-w-article">
-                <ContentBlocks blocks={article.intro} />
+            <main className="min-w-0 pb-8">
+              <Hero meta={article} />
+
+              <div className="min-[1060px]:hidden">
+                <TableOfContents items={toc} />
               </div>
-            </section>
 
-            {article.sections.map((section) => (
-              <ArticleSection key={section.id} section={section} />
-            ))}
+              <section id="intro" className="scroll-mt-28 pt-8 sm:pt-10">
+                <header className="mb-10 max-w-article">
+                  <SubsectionTitle id="intro-title">Introduction</SubsectionTitle>
+                </header>
+                <div className="max-w-article">
+                  <ContentBlocks blocks={article.intro} />
+                </div>
+              </section>
 
-            <SiteFooter />
-          </main>
+              {article.sections.map((section) => (
+                <ArticleSection key={section.id} section={section} />
+              ))}
+
+              <SiteFooter />
+            </main>
+          </div>
         </div>
-      </div>
+      </EarthScrollStage>
     </div>
   );
 }

@@ -11,7 +11,14 @@ export function Hero({ meta }: HeroProps) {
       className="pb-6 sm:pb-8"
       style={{ paddingTop: "var(--hero-title-top-spacing, 5.6rem)" }}
     >
-      <DisplayTitle>{meta.title}</DisplayTitle>
+      {/* Invisible layout anchor — earth-hero-title shrinks into this position */}
+      <DisplayTitle
+        id="article-title"
+        style={{ visibility: 'hidden', pointerEvents: 'none', userSelect: 'none' }}
+        aria-hidden="true"
+      >
+        {meta.title}
+      </DisplayTitle>
 
       <div className="mt-8 max-w-[42rem]">
         <Lead>{meta.subtitle}</Lead>
