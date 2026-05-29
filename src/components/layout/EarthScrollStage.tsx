@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useRef, type ReactNode } from 'react';
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import gsap from 'gsap';
@@ -83,10 +83,6 @@ export function EarthScrollStage({ children, nav }: { children: ReactNode; nav?:
   });
   // Pointer to buildScrollStory set once the Three.js effect mounts
   const buildScrollStoryRef = useRef<(() => void) | null>(null);
-  const effectEnabledRef = useRef(false);
-  const maskActionsRef = useRef<{ clear: () => void } | null>(null);
-
-  const [effectEnabled, setEffectEnabled] = useState(false);
 
   // ── DialKit ────────────────────────────────────────────────
   const params = useDialKit('Earth', {
@@ -118,11 +114,6 @@ export function EarthScrollStage({ children, nav }: { children: ReactNode; nav?:
       }
     },
   });
-
-  useEffect(() => {
-    effectEnabledRef.current = effectEnabled;
-    if (!effectEnabled) maskActionsRef.current?.clear();
-  }, [effectEnabled]);
 
   // Sync DialKit → ref → rebuild timeline whenever a dial moves
   useEffect(() => {
@@ -189,7 +180,7 @@ export function EarthScrollStage({ children, nav }: { children: ReactNode; nav?:
     let scrollTimeline: gsap.core.Timeline | null = null;
     let scrollTriggers: ScrollTrigger[] = [];
     // Cached on initial build and resize — never re-measured mid-scroll
-    let measuredTargets: { oWorld: THREE.Vector3; earthOScale: number; titleShrink: { scale: number; dx: number; dy: number; earthFinalScale: number } } | null = null;
+    let measuredTargets: { oWorld: THREE.Vector3; earthOScale: number; titleShrink: { scale: number; dx: number; dy: number; earthFinalScale: number }; oFinalWorld: THREE.Vector3 } | null = null;
 
     // Article-phase tracking: after the scroll story ends, earth follows #article-title
     let isArticlePhase = false;
@@ -311,7 +302,21 @@ export function EarthScrollStage({ children, nav }: { children: ReactNode; nav?:
         titleShrink = { scale, dx, dy, earthFinalScale: earthOScale * scale };
       }
 
-      return { oWorld, earthOScale, titleShrink };
+      // Measure where the O ends up after titleShrink by temporarily applying the transform
+      gsap.set(titleWrap, { x: titleShrink.dx, y: titleShrink.dy, scale: titleShrink.scale, transformOrigin: 'left top' });
+      const oFinalRect = oTarget.getBoundingClientRect();
+      const oFinalCx   = oFinalRect.left + oFinalRect.width  / 2;
+      const oFinalCy   = oFinalRect.top  + oFinalRect.height / 2;
+      gsap.set(titleWrap, { x: 0, y: 60, scale: 1, clearProps: 'transformOrigin' });
+
+      const oFinalWorld = new THREE.Vector3(
+        (oFinalCx / window.innerWidth)  * 2 - 1,
+        -(oFinalCy / window.innerHeight) * 2 + 1,
+        0
+      ).unproject(camera);
+      oFinalWorld.z = 0;
+
+      return { oWorld, earthOScale, titleShrink, oFinalWorld };
     }
 
     function killScrollStory() {
@@ -339,7 +344,7 @@ export function EarthScrollStage({ children, nav }: { children: ReactNode; nav?:
       if (remeasure || !measuredTargets) {
         measuredTargets = measureEarthTargets();
       }
-      const { titleShrink } = measuredTargets;
+      const { titleShrink, oFinalWorld } = measuredTargets;
 
       // Apply dial-tuned start state after measurement reset
       earthScroll.position.set(p.startX, p.startY, 0);
@@ -419,13 +424,17 @@ export function EarthScrollStage({ children, nav }: { children: ReactNode; nav?:
           duration: STORY.oHandoff.duration, ease: STORY.oHandoff.ease,
         }, 'oHandoff')
 
-        // ── Title shrinks to article-header size ──────────────
+        // ── Title shrinks to article-header size; earth follows the O ──
         .addLabel('titleShrink', STORY.titleShrink.at)
         .to(titleWrap, {
           x:               titleShrink.dx,
           y:               titleShrink.dy,
           scale:           titleShrink.scale,
           transformOrigin: 'left top',
+          duration: STORY.titleShrink.duration, ease: STORY.titleShrink.ease,
+        }, 'titleShrink')
+        .to(earthScroll.position, {
+          x: oFinalWorld.x, y: oFinalWorld.y,
           duration: STORY.titleShrink.duration, ease: STORY.titleShrink.ease,
         }, 'titleShrink')
         .to(earthScroll.scale, {
@@ -504,9 +513,7 @@ export function EarthScrollStage({ children, nav }: { children: ReactNode; nav?:
       }
 
       const hit = raycastEarth();
-      hoverUv = effectEnabledRef.current && hit?.uv
-        ? { u: hit.uv.x, v: hit.uv.y }
-        : null;
+      hoverUv = hit?.uv ? { u: hit.uv.x, v: hit.uv.y } : null;
       if (!drag.active) setEarthCursor(hit ? 'grab' : null);
     }
 
@@ -530,13 +537,6 @@ export function EarthScrollStage({ children, nav }: { children: ReactNode; nav?:
     window.addEventListener('pointerup',     endDrag as EventListener);
     window.addEventListener('pointercancel', endDrag as EventListener);
     window.addEventListener('pointerleave',  onPointerLeave);
-
-    function clearMask() {
-      maskCtx.globalCompositeOperation = 'source-over';
-      maskCtx.fillStyle = '#000';
-      maskCtx.fillRect(0, 0, MASK_SZ, MASK_SZ);
-      maskTex.needsUpdate = true;
-    }
 
     function paint(u: number, v: number) {
       const x = u * MASK_SZ;
@@ -564,8 +564,6 @@ export function EarthScrollStage({ children, nav }: { children: ReactNode; nav?:
       maskTex.needsUpdate = true;
     }
 
-    maskActionsRef.current = { clear: clearMask };
-
     // ── Render loop ────────────────────────────────────────────
     const clock = new THREE.Clock();
     let rafId: number;
@@ -587,10 +585,8 @@ export function EarthScrollStage({ children, nav }: { children: ReactNode; nav?:
         earthDrag.rotation.y += IDLE_SPIN * dt;
       }
 
-      if (effectEnabledRef.current) {
-        if (hoverUv && !drag.active) paint(hoverUv.u, hoverUv.v);
-        decayMask(dt);
-      }
+      if (hoverUv && !drag.active) paint(hoverUv.u, hoverUv.v);
+      decayMask(dt);
 
       // Article phase: earth tracks the "o" span as heroInner scrolls normally
       if (isArticlePhase) {
@@ -638,7 +634,6 @@ export function EarthScrollStage({ children, nav }: { children: ReactNode; nav?:
     return () => {
       alive = false;
       buildScrollStoryRef.current = null;
-      maskActionsRef.current = null;
       cancelAnimationFrame(rafId);
       clearTimeout(resizeTimer);
       killScrollStory();
@@ -721,22 +716,6 @@ export function EarthScrollStage({ children, nav }: { children: ReactNode; nav?:
             <h1 className="earth-hero-title">
               W<span ref={oTargetRef} id="o-target">o</span>rld Model Deep-Dive
             </h1>
-          </div>
-
-          <div id="earth-effect-controls">
-            <label className="earth-effect-toggle">
-              <span>Enable Effect</span>
-              <input
-                type="checkbox"
-                role="switch"
-                checked={effectEnabled}
-                onChange={(e) => setEffectEnabled(e.target.checked)}
-              />
-              <span className="earth-effect-switch" aria-hidden />
-            </label>
-            {effectEnabled && (
-              <span className="earth-effect-hint">Hover the globe</span>
-            )}
           </div>
 
           <div ref={scrollCueRef} id="scroll-cue">

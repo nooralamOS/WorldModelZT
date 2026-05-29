@@ -1,9 +1,9 @@
 @import "tailwindcss";
 
 @theme {
-  --font-sans: var(--font-inter), "Inter", system-ui, -apple-system,
+  --font-sans: "Inter", system-ui, -apple-system,
     BlinkMacSystemFont, sans-serif;
-  --font-display: var(--font-inter), "Inter", system-ui, -apple-system,
+  --font-display: "Inter", system-ui, -apple-system,
     BlinkMacSystemFont, sans-serif;
 
   --color-surface: #0127ff;
@@ -227,82 +227,6 @@ body.can-grab-earth {
   letter-spacing: 0.12em;
   text-transform: uppercase;
   color: rgba(255, 255, 255, 0.45);
-  pointer-events: none;
-}
-
-#earth-effect-controls {
-  position: absolute;
-  bottom: 6.5rem;
-  left: 50%;
-  transform: translateX(-50%);
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 0.75rem;
-  pointer-events: auto;
-  z-index: 4;
-}
-
-.earth-effect-toggle {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.75rem;
-  font-size: 0.75rem;
-  font-weight: 600;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: rgba(255, 255, 255, 0.72);
-  cursor: pointer;
-  user-select: none;
-}
-
-.earth-effect-toggle input {
-  position: absolute;
-  opacity: 0;
-  width: 0;
-  height: 0;
-}
-
-.earth-effect-switch {
-  position: relative;
-  width: 2.25rem;
-  height: 1.25rem;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.18);
-  transition: background 0.2s ease;
-}
-
-.earth-effect-switch::after {
-  content: '';
-  position: absolute;
-  top: 0.125rem;
-  left: 0.125rem;
-  width: 1rem;
-  height: 1rem;
-  border-radius: 50%;
-  background: #fff;
-  transition: transform 0.2s ease;
-}
-
-.earth-effect-toggle input:checked + .earth-effect-switch {
-  background: rgba(255, 255, 255, 0.42);
-}
-
-.earth-effect-toggle input:checked + .earth-effect-switch::after {
-  transform: translateX(1rem);
-}
-
-.earth-effect-toggle input:focus-visible + .earth-effect-switch {
-  outline: 2px solid rgba(255, 255, 255, 0.65);
-  outline-offset: 2px;
-}
-
-.earth-effect-hint {
-  font-size: clamp(1.5rem, 4vw, 2.25rem);
-  font-weight: 600;
-  color: rgba(255, 255, 255, 0.5);
-  letter-spacing: -0.02em;
-  text-transform: none;
   pointer-events: none;
 }
 

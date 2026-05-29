@@ -1,6 +1,6 @@
 import { ArticleSection } from "@/components/article/ArticleSection";
 import { ContentBlocks } from "@/components/article/ContentBlocks";
-import { EarthScrollStage } from "@/components/layout/EarthScrollStage";
+import { EarthScrollStageClient } from "@/components/layout/EarthScrollStageClient";
 import { Hero } from "@/components/layout/Hero";
 import { SiteFooter } from "@/components/layout/SiteFooter";
 import { SiteNav } from "@/components/layout/SiteNav";
@@ -19,7 +19,7 @@ export default function HomePage() {
         "--nav-item-padding-x": "0.8rem",
       } as React.CSSProperties}
     >
-      <EarthScrollStage nav={<SiteNav items={toc} />}>
+      <EarthScrollStageClient nav={<SiteNav items={toc} />}>
         <div id="top" className="mx-auto max-w-content px-6 sm:px-8 lg:px-12">
           <div
             className="min-[1060px]:grid"
@@ -56,7 +56,7 @@ export default function HomePage() {
             </main>
           </div>
         </div>
-      </EarthScrollStage>
+      </EarthScrollStageClient>
     </div>
   );
 }
