@@ -6,7 +6,7 @@
   --font-display: "Inter", system-ui, -apple-system,
     BlinkMacSystemFont, sans-serif;
 
-  --color-surface: #0127ff;
+  --color-surface: #0127ff; /* pink: FA4EDF; blue: 0127ff */
   --color-surface-elevated: #2240ff;
   --color-ink: #ffffff;
   --color-ink-secondary: #ffffff;
@@ -209,8 +209,7 @@ body.can-grab-earth {
 
 #o-target {
   display: inline-block;
-  color: transparent;
-  -webkit-text-stroke: 3px #fff;
+  visibility: hidden;
 }
 
 #scroll-cue {

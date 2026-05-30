@@ -17,7 +17,7 @@ export function Hero({ meta }: HeroProps) {
         style={{ visibility: 'hidden', pointerEvents: 'none', userSelect: 'none' }}
         aria-hidden="true"
       >
-        {meta.title}
+        W<span id="article-o-anchor">o</span>rld Model Deep-Dive
       </DisplayTitle>
 
       <div className="mt-8 max-w-[42rem]">
