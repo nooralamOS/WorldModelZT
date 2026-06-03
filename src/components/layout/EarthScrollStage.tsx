@@ -4,6 +4,15 @@ import { useEffect, useRef, type ReactNode } from 'react';
 import { DialRoot, useDialKit } from 'dialkit';
 import 'dialkit/styles.css';
 
+type AnimParams = {
+  clipReveal:  { start: number; end: number };
+  titleShrink: { start: number; end: number };
+  bodyFade:    { start: number; end: number };
+  tocFade:     { start: number; end: number };
+  title:       { nudgeDx: number; nudgeDy: number; nudgeScale: number };
+  body:        { gap: number; nudgeDy: number };
+};
+
 const STORY = {
   scrollDistance: '+=300%',
   scrub: true,
@@ -96,7 +105,7 @@ export function EarthScrollStage({ children, nav, articlePreview }: { children: 
 
   // Sync DialKit → specRef and rebuild GSAP timeline
   useEffect(() => {
-    const p = params as any;
+    const p = params as unknown as AnimParams;
     specRef.current = {
       phases: {
         clipReveal:  { start: p.clipReveal.start,  end: p.clipReveal.end  },
@@ -750,7 +759,7 @@ export function EarthScrollStage({ children, nav, articlePreview }: { children: 
       if (hoverUv && !drag.active) paint(hoverUv.u, hoverUv.v);
       decayMask(dt);
 
-      const progress = (scrollTimeline as any)?.scrollTrigger?.progress ?? 0;
+      const progress = (scrollTimeline as gsap.core.Animation | null)?.scrollTrigger?.progress ?? 0;
 
       // Update position readout every frame
       if (posReadoutRef.current) {
