@@ -3,6 +3,7 @@
 import { useEffect, useRef, type ReactNode } from 'react';
 import { DialRoot, useDialKit } from 'dialkit';
 import 'dialkit/styles.css';
+import type * as THREE from 'three';
 
 type AnimParams = {
   clipReveal:  { start: number; end: number };
@@ -756,7 +757,8 @@ export function EarthScrollStage({ children, nav, articlePreview }: { children: 
         earthDrag.rotation.y += IDLE_SPIN * dt;
       }
 
-      if (hoverUv && !drag.active) paint(hoverUv.u, hoverUv.v);
+      const uv = hoverUv as { u: number; v: number } | null;
+      if (uv && !drag.active) paint(uv.u, uv.v);
       decayMask(dt);
 
       const progress = (scrollTimeline as gsap.core.Animation | null)?.scrollTrigger?.progress ?? 0;
