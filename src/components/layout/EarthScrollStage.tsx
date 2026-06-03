@@ -7,15 +7,24 @@ import 'dialkit/styles.css';
 const STORY = {
   scrollDistance: '+=300%',
   scrub: true,
-  earthMove:    { at: 0,    duration: 0.50, ease: 'power2.inOut' },
-  titleReveal:  { at: 0.24, duration: 0.38, ease: 'power2.out'   },
-  titleShrink:  { at: 0.56, duration: 0.33, ease: 'power2.inOut' },
-  articleIn:    { at: 0.72, duration: 0.28, ease: 'power2.out'   },
-  // World-space keyframes (scale = earthScroll.scale / initialScale)
+  earthMove: { at: 0, duration: 0.50, ease: 'power2.inOut' },
+  // World-space keyframes for earth (scale = earthScroll.scale / initialScale)
   earthTune: [
     { at: 0.56, x: -2.97, y: -0.05, scale: 0.15 },
     { at: 0.89, x: -1.32, y:  1.18, scale: 0.07 },
   ],
+};
+
+// Default animation spec — DialKit sliders write into specRef at runtime
+const DEFAULT_SPEC = {
+  phases: {
+    clipReveal:  { start: 0.24, end: 0.62 },
+    titleShrink: { start: 0.56, end: 0.89 },
+    bodyFade:    { start: 0.71, end: 0.89 },
+    tocFade:     { start: 0.84, end: 1.00 },
+  },
+  title: { nudgeDx: 0, nudgeDy: 0, nudgeScale: 0 },
+  body:  { gap: 12, nudgeDy: 0 },
 };
 
 const SPHERE_RADIUS = 1.0;
@@ -44,97 +53,59 @@ const FRAG_PTS = /* glsl */`
     gl_FragColor = vec4(1.0, 1.0, 1.0, 1.0 - mask);
   }
 `;
-type EarthParams = {
-  startX: number; startY: number; startScale: number;
-  inOX: number; inOY: number; inOScale: number;
-  onOX: number; onOY: number; onOScaleMult: number;
-  finalX: number; finalY: number; finalScaleMult: number;
-};
-
-export function EarthScrollStage({ children, nav }: { children: ReactNode; nav?: ReactNode }) {
+export function EarthScrollStage({ children, nav, articlePreview }: { children: ReactNode; nav?: ReactNode; articlePreview?: ReactNode }) {
   const canvasRef         = useRef<HTMLCanvasElement>(null);
   const heroInnerRef      = useRef<HTMLDivElement>(null);
+  const heroVisualRef     = useRef<HTMLDivElement>(null);
   const titleWrapRef      = useRef<HTMLDivElement>(null);
+  const titleH1Ref        = useRef<HTMLHeadingElement>(null);
   const oTargetRef        = useRef<HTMLSpanElement>(null);
   const scrollCueRef      = useRef<HTMLDivElement>(null);
-  const articleContentRef = useRef<HTMLDivElement>(null);
+  const articleContentRef  = useRef<HTMLDivElement>(null);
+  const articlePreviewRef  = useRef<HTMLDivElement>(null);
   const posReadoutRef     = useRef<HTMLSpanElement>(null);
 
-  // Bridge: live params readable inside the Three.js effect closure
-  const earthParamsRef = useRef<EarthParams>({
-    startX: 0, startY: 0, startScale: 1,
-    inOX: 0, inOY: 0, inOScale: 0.15,
-    onOX: 0, onOY: 0, onOScaleMult: 1,
-    finalX: 0, finalY: 0, finalScaleMult: 1,
-  });
+  // Animation spec — readable inside the Three.js effect closure via ref
+  const specRef = useRef(DEFAULT_SPEC);
   const refreshScrollRef = useRef<(() => void) | null>(null);
   const rebuildStoryRef    = useRef<((remeasure?: boolean) => void) | null>(null);
 
-  // ── DialKit ────────────────────────────────────────────────
-  const params = useDialKit('Earth', {
-    start: {
-      x:     [0,    -4,   4,   0.01],
-      y:     [0,    -3,   3,   0.01],
-      scale: [1.0,  0.01, 4,   0.01],
+  // ── DialKit — animation timing & nudges ────────────────────
+  const params = useDialKit('Animation', {
+    clipReveal:  { start: [0.24, 0, 1, 0.01], end: [0.62, 0, 1, 0.01] },
+    titleShrink: { start: [0.56, 0, 1, 0.01], end: [0.89, 0, 1, 0.01] },
+    bodyFade:    { start: [0.71, 0, 1, 0.01], end: [0.89, 0, 1, 0.01] },
+    tocFade:     { start: [0.84, 0, 1, 0.01], end: [1.00, 0, 1, 0.01] },
+    title: {
+      nudgeDx:    [0, -200, 200, 1],
+      nudgeDy:    [0, -200, 200, 1],
+      nudgeScale: [0, -0.3,  0.3, 0.005],
     },
-    // Fine-tune offset from DOM "o" center (all scroll phases while on hero)
-    inO: {
-      x:     [0, -2, 2, 0.01],
-      y:     [0, -2, 2, 0.01],
-      scale: [0.15,  0.05, 1, 0.01],
+    body: {
+      gap:     [12, -50, 150, 1],
+      nudgeDy: [0,  -50,  50, 1],
     },
-    // Fine-tune while title shrinks (scroll ~0.55–0.91, e.g. 0.57)
-    onO: {
-      x:     [0, -2, 2, 0.01],
-      y:     [0, -2, 2, 0.01],
-      scale: [1.0, 0.25, 2.5, 0.01],
-    },
-    // Fine-tune after scroll story — article header "o"
-    final: {
-      x:     [0, -2, 2, 0.01],
-      y:     [0, -2, 2, 0.01],
-      scale: [1.0, 0.25, 2.5, 0.01],
-    },
-    logValues: { type: 'action', label: 'Log to console' },
+    logValues: { type: 'action', label: 'Log spec to console' },
   }, {
     onAction: (action: string) => {
       if (action === 'logValues') {
-        const p = earthParamsRef.current;
-        console.log(
-          '%c[Earth params]',
-          'font-weight:bold;color:#4a9eff',
-          `\nstart.x:         ${p.startX.toFixed(3)}` +
-          `\nstart.y:         ${p.startY.toFixed(3)}` +
-          `\nstart.scale:     ${p.startScale.toFixed(3)}` +
-          `\ninO.x:           ${p.inOX.toFixed(3)}` +
-          `\ninO.y:           ${p.inOY.toFixed(3)}` +
-          `\ninO.scale:       ${p.inOScale.toFixed(3)}` +
-          `\nonO.x:           ${p.onOX.toFixed(3)}  (fine-tune @ ~0.57)` +
-          `\nonO.y:           ${p.onOY.toFixed(3)}` +
-          `\nonO.scaleMult:   ${p.onOScaleMult.toFixed(3)}` +
-          `\nfinal.x:         ${p.finalX.toFixed(3)}  (article header)` +
-          `\nfinal.y:         ${p.finalY.toFixed(3)}` +
-          `\nfinal.scaleMult: ${p.finalScaleMult.toFixed(3)}`
-        );
+        console.log('%c[Animation spec]', 'font-weight:bold;color:#4a9eff', JSON.stringify(specRef.current, null, 2));
       }
     },
   });
 
-  // Sync DialKit → ref and rebuild GSAP earth track
+  // Sync DialKit → specRef and rebuild GSAP timeline
   useEffect(() => {
-    earthParamsRef.current = {
-      startX:         (params as any).start.x,
-      startY:         (params as any).start.y,
-      startScale:     (params as any).start.scale,
-      inOX:           (params as any).inO.x,
-      inOY:           (params as any).inO.y,
-      inOScale:       (params as any).inO.scale,
-      onOX:           (params as any).onO.x,
-      onOY:           (params as any).onO.y,
-      onOScaleMult:   (params as any).onO.scale,
-      finalX:         (params as any).final.x,
-      finalY:         (params as any).final.y,
-      finalScaleMult: (params as any).final.scale,
+    const p = params as any;
+    specRef.current = {
+      phases: {
+        clipReveal:  { start: p.clipReveal.start,  end: p.clipReveal.end  },
+        titleShrink: { start: p.titleShrink.start, end: p.titleShrink.end },
+        bodyFade:    { start: p.bodyFade.start,     end: p.bodyFade.end    },
+        tocFade:     { start: p.tocFade.start,      end: p.tocFade.end     },
+      },
+      title: { nudgeDx: p.title.nudgeDx, nudgeDy: p.title.nudgeDy, nudgeScale: p.title.nudgeScale },
+      body:  { gap: p.body.gap, nudgeDy: p.body.nudgeDy },
     };
     rebuildStoryRef.current?.(false);
     refreshScrollRef.current?.();
@@ -160,10 +131,13 @@ export function EarthScrollStage({ children, nav }: { children: ReactNode; nav?:
 
       const canvas         = canvasRef.current!;
       const heroInner      = heroInnerRef.current!;
+      const heroVisual     = heroVisualRef.current!;
       const titleWrap      = titleWrapRef.current!;
+      const titleH1        = titleH1Ref.current!;
       const oTarget        = oTargetRef.current!;
       const scrollCue      = scrollCueRef.current!;
       const articleContent = articleContentRef.current!;
+      const tocSidebar     = document.getElementById('toc-sidebar') as HTMLElement | null;
 
     // ── Renderer ──────────────────────────────────────────────
     const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
@@ -213,7 +187,7 @@ export function EarthScrollStage({ children, nav }: { children: ReactNode; nav?:
     let scrollTimeline: gsap.core.Timeline | null = null;
     let scrollTriggers: ScrollTrigger[] = [];
     // Cached on initial build and resize — never re-measured mid-scroll
-    let measuredTargets: { oWorld: THREE.Vector3; earthOScale: number; titleShrink: { scale: number; dx: number; dy: number; earthFinalScale: number }; oFinalWorld: THREE.Vector3 } | null = null;
+    let measuredTargets: { oWorld: THREE.Vector3; earthOScale: number; titleShrink: { scale: number; dx: number; dy: number; earthFinalScale: number }; oFinalWorld: THREE.Vector3; previewTop: number; previewLeft: number } | null = null;
 
     let scrollPastHero = false;
     let titlePlacedInArticle = false;
@@ -224,44 +198,58 @@ export function EarthScrollStage({ children, nav }: { children: ReactNode; nav?:
 
     const restoreTitleToHero = () => {
       const articleTitle = document.getElementById('article-title') as HTMLElement | null;
-      const h1 = titleWrap.querySelector('h1') as HTMLElement | null;
 
       if (articleTitle) articleTitle.style.display = '';
-      if (titleWrap.parentElement !== heroInner) heroInner.appendChild(titleWrap);
+      if (titleWrap.parentElement !== heroVisual) heroVisual.appendChild(titleWrap);
 
-      if (h1) {
-        h1.classList.add('earth-hero-title');
-        h1.classList.remove(...ARTICLE_TITLE_CLASSES);
-        h1.style.fontSize = '';
-      }
+      titleH1.classList.add('earth-hero-title');
+      titleH1.classList.remove(...ARTICLE_TITLE_CLASSES);
+      titleH1.style.fontSize = '';
 
+      // Restore clip container overflow so the rise animation works again
+      const clipEl = document.getElementById('title-clip') as HTMLElement | null;
+      if (clipEl) clipEl.style.overflow = 'hidden';
+
+      gsap.set(titleH1, { y: '110%', clearProps: 'x,scale' });
       gsap.set(titleWrap, {
-        y: 60, opacity: 0, textAlign: 'center',
-        clearProps: 'margin,padding,width,position,left,top,zIndex',
+        y: 0, opacity: 1, textAlign: 'center',
+        clearProps: 'x,scale,margin,padding,width,position,left,top,zIndex,transformOrigin',
       });
       gsap.set(oTarget, { visibility: 'hidden' });
+      if (articlePreviewRef.current) gsap.set(articlePreviewRef.current, { autoAlpha: 0 });
       titlePlacedInArticle = false;
     };
 
     const setArticleHandoff = (active: boolean) => {
       scrollPastHero = active;
       canvas.style.opacity = active ? '0' : '1';
+      // Show/hide the real article content only at the pin boundary — never during scroll —
+      // because articleContent sits at 300vh and enters the viewport from p≈0.667 onward.
+      // Fading it in via the scrubbed timeline causes the real subtitle to bleed through
+      // behind the articlePreview, creating a duplicate. Instant reveal on handoff is clean.
+      gsap.set(articleContent, { autoAlpha: active ? 1 : 0 });
+
+      if (active && articlePreviewRef.current) gsap.set(articlePreviewRef.current, { autoAlpha: 0 });
 
       if (active && !titlePlacedInArticle) {
         const articleTitle = document.getElementById('article-title') as HTMLElement | null;
         const header = articleTitle?.closest('header');
-        const h1 = titleWrap.querySelector('h1') as HTMLElement | null;
-        if (!header || !articleTitle || !h1) return;
+        if (!header || !articleTitle) return;
 
         const anchorFs = parseFloat(getComputedStyle(articleTitle).fontSize);
 
         header.insertBefore(titleWrap, articleTitle);
         articleTitle.style.display = 'none';
 
-        h1.classList.remove('earth-hero-title');
-        h1.classList.add(...ARTICLE_TITLE_CLASSES);
-        h1.style.fontSize = `${anchorFs}px`;
+        titleH1.classList.remove('earth-hero-title');
+        titleH1.classList.add(...ARTICLE_TITLE_CLASSES);
+        titleH1.style.fontSize = `${anchorFs}px`;
 
+        // Release the clip so the article title renders without any overflow constraint
+        const clipEl = document.getElementById('title-clip') as HTMLElement | null;
+        if (clipEl) clipEl.style.overflow = 'visible';
+
+        gsap.set(titleH1, { clearProps: 'transform' });
         gsap.set(titleWrap, {
           clearProps: 'transform',
           opacity: 1,
@@ -354,6 +342,8 @@ export function EarthScrollStage({ children, nav }: { children: ReactNode; nav?:
     // Pure — no GSAP side effects. Only called when the hero is in the viewport.
     function measureEarthTargets() {
       // ── Earth "o" target (title revealed — matches earthMove destination) ──
+      // Temporarily reveal the h1 out of its clip so bounding rects are accurate
+      gsap.set(titleH1, { y: 0 });
       gsap.set(titleWrap, { y: 0, opacity: 1 });
       const oRect = oTarget.getBoundingClientRect();
       const oCx   = oRect.left + oRect.width  / 2;
@@ -395,7 +385,9 @@ export function EarthScrollStage({ children, nav }: { children: ReactNode; nav?:
             })();
 
         const rfs       = parseFloat(getComputedStyle(document.documentElement).fontSize);
-        const targetTop = (3.5 + 5.6) * rfs;
+        const targetTop = anchorEl
+          ? anchorEl.getBoundingClientRect().top - articleContent.getBoundingClientRect().top
+          : 5.6 * rfs;
 
         const dx = targetLeft - heroH1Rect.left;
         const dy = targetTop  - heroH1Rect.top;
@@ -405,10 +397,16 @@ export function EarthScrollStage({ children, nav }: { children: ReactNode; nav?:
 
       // Measure where the O ends up after titleShrink by temporarily applying the transform
       gsap.set(titleWrap, { x: titleShrink.dx, y: titleShrink.dy, scale: titleShrink.scale, transformOrigin: 'left top' });
-      const oFinalRect = oTarget.getBoundingClientRect();
-      const oFinalCx   = oFinalRect.left + oFinalRect.width  / 2;
-      const oFinalCy   = oFinalRect.top  + oFinalRect.height / 2;
-      gsap.set(titleWrap, { x: 0, y: 60, scale: 1, clearProps: 'transformOrigin' });
+      const oFinalRect       = oTarget.getBoundingClientRect();
+      const oFinalCx         = oFinalRect.left + oFinalRect.width  / 2;
+      const oFinalCy         = oFinalRect.top  + oFinalRect.height / 2;
+      // Measure the title's final bounding box to anchor the article preview below it
+      const titleWrapFinalRect = titleWrap.getBoundingClientRect();
+      const heroInnerRect      = heroInner.getBoundingClientRect();
+      const previewTop  = titleWrapFinalRect.bottom - heroInnerRect.top;
+      const previewLeft = titleWrapFinalRect.left   - heroInnerRect.left;
+      gsap.set(titleH1, { y: '110%' });
+      gsap.set(titleWrap, { x: 0, y: 0, scale: 1, clearProps: 'transformOrigin' });
 
       const oFinalWorld = new THREE.Vector3(
         (oFinalCx / window.innerWidth)  * 2 - 1,
@@ -417,7 +415,7 @@ export function EarthScrollStage({ children, nav }: { children: ReactNode; nav?:
       ).unproject(camera);
       oFinalWorld.z = 0;
 
-      return { oWorld, earthOScale, titleShrink, oFinalWorld };
+      return { oWorld, earthOScale, titleShrink, oFinalWorld, previewTop, previewLeft };
     }
 
     function killScrollStory() {
@@ -435,12 +433,17 @@ export function EarthScrollStage({ children, nav }: { children: ReactNode; nav?:
     function buildScrollStory(remeasure = true) {
       killScrollStory();
 
-      const p = earthParamsRef.current;
+      const { phases, title: titleSpec, body: bodySpec } = specRef.current;
+      const articlePreviewEl = articlePreviewRef.current;
+      const navEl = document.querySelector('nav[aria-label="Page sections"]') as HTMLElement | null;
 
       // Always reset GSAP-driven state before rebuilding
       gsap.set(titleWrap,      { clearProps: 'all' });
       gsap.set(oTarget,        { visibility: 'hidden', clearProps: 'webkitTextStrokeColor,color,webkitTextStrokeWidth' });
       gsap.set(articleContent, { clearProps: 'opacity,visibility' });
+      if (articlePreviewEl) gsap.set(articlePreviewEl, { clearProps: 'all' });
+      gsap.set(document.body,  { backgroundColor: '#0127ff' });
+      if (navEl) gsap.set(navEl, { backgroundColor: 'rgba(1,39,255,0.9)' });
 
       scrollPastHero = false;
       canvas.style.opacity = '1';
@@ -451,21 +454,32 @@ export function EarthScrollStage({ children, nav }: { children: ReactNode; nav?:
       if (remeasure || !measuredTargets) {
         measuredTargets = measureEarthTargets();
       }
-      const { titleShrink, oWorld } = measuredTargets;
+      const { titleShrink, oWorld, previewTop, previewLeft } = measuredTargets;
       const [midPose, endPose] = STORY.earthTune;
-      const inOPose = {
-        x: oWorld.x + p.inOX,
-        y: oWorld.y + p.inOY,
-        scale: p.inOScale,
-      };
+      const inOPose = { x: oWorld.x, y: oWorld.y, scale: 0.15 };
 
-      earthScroll.position.set(p.startX, p.startY, 0);
-      earthScroll.scale.setScalar(initialScale * p.startScale);
+      earthScroll.position.set(0, 0, 0);
+      earthScroll.scale.setScalar(initialScale);
 
-      gsap.set(titleWrap,      { y: 60, opacity: 0 });
+      gsap.set(titleH1,        { y: '110%' });
+      gsap.set(titleWrap,      { y: 0, opacity: 1 });
       gsap.set(scrollCue,      { opacity: 1 });
       gsap.set(articleContent, { opacity: 0, visibility: 'hidden' });
+      if (tocSidebar) gsap.set(tocSidebar, { opacity: 0 });
       articleContent.classList.remove('is-readable');
+
+      // Position the in-hero preview below the title's final landing spot
+      if (articlePreviewEl) {
+        gsap.set(articlePreviewEl, {
+          position: 'absolute',
+          top:      previewTop + bodySpec.gap,
+          left:     previewLeft,
+          right:    0,
+          opacity:  0,
+          visibility: 'hidden',
+          y: 24,
+        });
+      }
 
       scrollTriggers.push(
         gsap.to(scrollCue, {
@@ -517,49 +531,85 @@ export function EarthScrollStage({ children, nav }: { children: ReactNode; nav?:
         .addLabel('earthMid', flyEnd)
         .to(earthScroll.position, {
           x: midPose.x, y: midPose.y,
-          duration: midPose.at - flyEnd, ease: 'power2.inOut',
+          duration: phases.titleShrink.start - flyEnd, ease: 'power2.inOut',
         }, 'earthMid')
         .to(earthScroll.scale, {
           x: initialScale * midPose.scale,
           y: initialScale * midPose.scale,
           z: initialScale * midPose.scale,
-          duration: midPose.at - flyEnd, ease: 'power2.inOut',
+          duration: phases.titleShrink.start - flyEnd, ease: 'power2.inOut',
         }, 'earthMid')
 
-        // ── Title fades in from below ─────────────────────────
-        .addLabel('titleReveal', STORY.titleReveal.at)
-        .to(titleWrap, {
-          y: 0, opacity: 1,
-          duration: STORY.titleReveal.duration, ease: STORY.titleReveal.ease,
+        // ── Title rises through invisible clip baseline ───────
+        .addLabel('titleReveal', phases.clipReveal.start)
+        .to(titleH1, {
+          y: '0%',
+          duration: phases.clipReveal.end - phases.clipReveal.start,
+          ease: 'power2.out',
         }, 'titleReveal')
         .set(oTarget, { visibility: 'hidden' }, 'titleReveal')
 
-        // ── Title + earth shrink together (shared label, duration, ease) ──
-        .addLabel('titleShrink', STORY.titleShrink.at)
+        // ── Title + earth shrink together ──────────────────────
+        .addLabel('titleShrink', phases.titleShrink.start)
         .to(titleWrap, {
-          x:               titleShrink.dx,
-          y:               titleShrink.dy,
-          scale:           titleShrink.scale,
+          x:               titleShrink.dx + titleSpec.nudgeDx,
+          y:               titleShrink.dy + titleSpec.nudgeDy,
+          scale:           titleShrink.scale + titleSpec.nudgeScale,
           transformOrigin: 'left top',
-          duration: STORY.titleShrink.duration, ease: STORY.titleShrink.ease,
+          duration: phases.titleShrink.end - phases.titleShrink.start,
+          ease: 'power2.inOut',
         }, 'titleShrink')
         .to(earthScroll.position, {
           x: endPose.x, y: endPose.y,
-          duration: STORY.titleShrink.duration, ease: STORY.titleShrink.ease,
+          duration: phases.titleShrink.end - phases.titleShrink.start,
+          ease: 'power2.inOut',
         }, 'titleShrink')
         .to(earthScroll.scale, {
           x: initialScale * endPose.scale,
           y: initialScale * endPose.scale,
           z: initialScale * endPose.scale,
-          duration: STORY.titleShrink.duration, ease: STORY.titleShrink.ease,
+          duration: phases.titleShrink.end - phases.titleShrink.start,
+          ease: 'power2.inOut',
         }, 'titleShrink')
 
-        // ── Article body fades in ─────────────────────────────
-        .addLabel('articleIn', STORY.articleIn.at)
-        .to(articleContent, {
-          autoAlpha: 1,
-          duration: STORY.articleIn.duration, ease: STORY.articleIn.ease,
+        // ── Article preview (in-hero) fades in as title arrives ──
+        // articleContent itself is NOT animated here — it's revealed instantly at onLeave
+        // to avoid the real article bleeding into the viewport during the pin (it sits at 300vh).
+        .addLabel('articleIn', phases.bodyFade.start)
+
+        // ── Sidebar fades in last, after title has settled ────
+        .addLabel('tocIn', phases.tocFade.start);
+
+      scrollTimeline.to(document.body, {
+        backgroundColor: '#00158c',
+        duration: phases.bodyFade.end - phases.bodyFade.start,
+        ease: 'power1.inOut',
+      }, 'articleIn');
+
+      if (navEl) {
+        scrollTimeline.to(navEl, {
+          backgroundColor: 'rgba(0,21,140,0.9)',
+          duration: phases.bodyFade.end - phases.bodyFade.start,
+          ease: 'power1.inOut',
         }, 'articleIn');
+      }
+
+      if (articlePreviewEl) {
+        scrollTimeline.to(articlePreviewEl, {
+          autoAlpha: 1,
+          y: bodySpec.nudgeDy,
+          duration: phases.bodyFade.end - phases.bodyFade.start,
+          ease: 'power2.out',
+        }, 'articleIn');
+      }
+
+      if (tocSidebar) {
+        scrollTimeline.to(tocSidebar, {
+          opacity: 1,
+          duration: phases.tocFade.end - phases.tocFade.start,
+          ease: 'power2.out',
+        }, 'tocIn');
+      }
     }
 
     rebuildStoryRef.current = buildScrollStory;
@@ -801,41 +851,81 @@ export function EarthScrollStage({ children, nav }: { children: ReactNode; nav?:
       />
 
       <section id="scroll-stage" style={{ position: 'relative', zIndex: 2 }}>
-        {/* Hero — 100 vh, pinned during scroll story */}
+        {/* Hero — pinned during scroll story. height:0 so the GSAP spacer alone
+            offsets articleContent; at p=1.0 the article arrives at viewport top
+            with no jump. heroVisual fills the viewport visually via absolute. */}
         <div
           ref={heroInnerRef}
           id="hero-inner"
           style={{
-            height:         '100vh',
-            width:          '100%',
-            display:        'flex',
-            alignItems:     'center',
-            justifyContent: 'center',
-            pointerEvents:  'none',
-            position:       'relative',
+            height:   0,
+            width:    '100%',
+            overflow: 'visible',
+            position: 'relative',
           }}
         >
           <div
-            ref={titleWrapRef}
-            id="title-wrap"
-            style={{ textAlign: 'center', opacity: 0, willChange: 'transform, opacity' }}
+            ref={heroVisualRef}
+            id="hero-visual"
+            style={{
+              position:       'absolute',
+              top:            0,
+              left:           0,
+              right:          0,
+              height:         '100vh',
+              display:        'flex',
+              alignItems:     'center',
+              justifyContent: 'center',
+              pointerEvents:  'none',
+            }}
           >
-            <h1 className="earth-hero-title">
-              W<span ref={oTargetRef} id="o-target">o</span>rld Model Deep-Dive
-            </h1>
-          </div>
+            <div
+              ref={titleWrapRef}
+              id="title-wrap"
+              style={{ textAlign: 'center', willChange: 'transform, opacity' }}
+            >
+              {/* overflow:hidden creates the invisible baseline — h1 rises up through it */}
+              <div id="title-clip" style={{ overflow: 'hidden', padding: '0.02em 0 0.1em' }}>
+                <h1
+                  ref={titleH1Ref}
+                  className="earth-hero-title"
+                  style={{ transform: 'translateY(110%)' }}
+                >
+                  W<span ref={oTargetRef} id="o-target">o</span>rld Model Deep-Dive
+                </h1>
+              </div>
+            </div>
 
-          <div ref={scrollCueRef} id="scroll-cue">
-            <span>Scroll</span>
-            <div className="scroll-chevron" />
+            <div ref={scrollCueRef} id="scroll-cue">
+              <span>Scroll</span>
+              <div className="scroll-chevron" />
+            </div>
+
+            {articlePreview && (
+              <div
+                ref={articlePreviewRef}
+                id="article-preview"
+                style={{
+                  position:      'absolute',
+                  top:           0,
+                  left:          0,
+                  right:         0,
+                  opacity:       0,
+                  visibility:    'hidden',
+                  pointerEvents: 'none',
+                }}
+              >
+                {articlePreview}
+              </div>
+            )}
           </div>
         </div>
 
-        {/* Article — fades in after scroll story, then scrolls normally */}
+        {/* Article — hidden until GSAP initialises (prevents flash while spacer is absent) */}
         <div
           ref={articleContentRef}
           id="article-content"
-          style={{ position: 'relative', zIndex: 3 }}
+          style={{ position: 'relative', zIndex: 3, visibility: 'hidden', opacity: 0 }}
         >
           {children}
         </div>

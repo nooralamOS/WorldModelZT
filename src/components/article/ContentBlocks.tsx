@@ -1,4 +1,7 @@
-import type { ContentBlock } from "@/content/types";
+"use client";
+
+import { useState } from "react";
+import type { ContentBlock, ExperimentLink } from "@/content/types";
 import { ExhibitFigure } from "@/components/article/ExhibitFigure";
 import { BodyText } from "@/components/typography/Prose";
 
@@ -127,9 +130,113 @@ function BlockRenderer({ block }: { block: ContentBlock }) {
         </div>
       );
 
+    case "experiment-card":
+      return <ExperimentCard {...block} />;
+
     default:
       return null;
   }
+}
+
+function ExperimentCard({
+  number,
+  prompt,
+  rationale,
+  links,
+}: {
+  number: string;
+  prompt: string;
+  rationale: string;
+  links: ExperimentLink[];
+}) {
+  const [activeHref, setActiveHref] = useState<string | null>(
+    () => links.find((l) => !l.disabled && l.href)?.href ?? null
+  );
+  const activeLink = links.find((l) => l.href === activeHref);
+  const embeddableLinks = links.filter((l) => !l.disabled && l.href);
+
+  function toggle(href: string) {
+    setActiveHref(href);
+  }
+
+  return (
+    <div className="rounded-[6px] border border-line px-6 py-6">
+      <div className="mb-3 font-mono text-[0.625rem] font-bold uppercase tracking-[0.14em] text-muted">
+        {number}
+      </div>
+
+      <div className="mb-4 overflow-hidden rounded-[6px] border border-line">
+        <div className="flex items-center justify-between border-b border-line bg-surface-elevated px-4 py-2">
+          <div className="flex items-center gap-3">
+            <div className="flex gap-1.5">
+              <div className="h-2.5 w-2.5 rounded-full bg-muted/30" />
+              <div className="h-2.5 w-2.5 rounded-full bg-muted/30" />
+              <div className="h-2.5 w-2.5 rounded-full bg-muted/30" />
+            </div>
+            <span className="font-mono text-[0.6875rem] text-muted">
+              {activeLink?.label.replace(" ↗", "")}
+            </span>
+          </div>
+          {activeHref && (
+            <a
+              href={activeHref}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="font-mono text-[0.6875rem] text-muted transition-colors hover:text-ink"
+            >
+              open ↗
+            </a>
+          )}
+        </div>
+        <div
+          className="relative overflow-hidden"
+          style={{ resize: "both", minHeight: "320px", height: "550px", minWidth: "100%" }}
+        >
+          {embeddableLinks.map((link) => (
+            <iframe
+              key={link.href}
+              src={link.href}
+              className="absolute inset-0 h-full w-full border-0 bg-surface-elevated"
+              style={{ display: activeHref === link.href ? "block" : "none" }}
+              sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-pointer-lock"
+              title={link.label}
+            />
+          ))}
+        </div>
+      </div>
+
+      <div className="mb-4 text-[1rem] font-[550] leading-snug tracking-[-0.01em] text-ink">
+        {prompt}
+      </div>
+      <p className="mb-4 text-[0.9063rem] leading-[1.65] text-ink-secondary">
+        {rationale}
+      </p>
+      <div className="flex flex-wrap gap-2">
+        {links.map((link) =>
+          link.disabled ? (
+            <span
+              key={link.label}
+              className="inline-flex items-center rounded-[4px] border border-line px-3 py-[0.3125rem] text-[0.8125rem] font-medium text-muted opacity-40"
+            >
+              {link.label}
+            </span>
+          ) : (
+            <button
+              key={link.label}
+              onClick={() => toggle(link.href!)}
+              className={`inline-flex items-center rounded-[4px] border px-3 py-[0.3125rem] text-[0.8125rem] font-medium transition-colors duration-150 ${
+                activeHref === link.href
+                  ? "border-ink bg-surface-elevated text-ink"
+                  : "border-line text-muted hover:border-ink-secondary hover:bg-surface-elevated hover:text-ink"
+              }`}
+            >
+              {link.label}
+            </button>
+          )
+        )}
+      </div>
+    </div>
+  );
 }
 
 function ListItemContent({ text }: { text: string }) {

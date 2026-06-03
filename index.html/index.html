@@ -1,0 +1,1161 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="A technical analysis of what world models are, how they work, who's building them, and what's holding them back." />
+  <title>World Model Deep-Dive</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    html {
+      scroll-behavior: smooth;
+    }
+
+    :root {
+      --font: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+      --bg: #ffffff;
+      --text: #111111;
+      --text-muted: #5a5a5a;
+      --text-faint: #999999;
+      --border: #e5e5e0;
+      --border-light: #f0f0eb;
+      --surface: #f8f8f5;
+      --reading-width: 680px;
+      --toc-width: 196px;
+      --nav-height: 52px;
+      --section-gap: 7rem;
+      --subsection-gap: 3.5rem;
+    }
+
+    body {
+      font-family: var(--font);
+      background: var(--bg);
+      color: var(--text);
+      font-size: 1.0625rem;
+      line-height: 1.75;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+      font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
+    }
+
+    /* ─── PROGRESS BAR ─── */
+    #progress-bar {
+      position: fixed;
+      top: 0;
+      left: 0;
+      height: 2px;
+      width: 0%;
+      background: var(--text);
+      z-index: 300;
+      transition: width 0.08s linear;
+    }
+
+    /* ─── TOP NAV ─── */
+    .topnav {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      z-index: 200;
+      height: var(--nav-height);
+      background: rgba(255, 255, 255, 0.9);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border-bottom: 1px solid transparent;
+      transition: border-color 0.25s ease;
+    }
+
+    .topnav.at-scroll {
+      border-bottom-color: var(--border);
+    }
+
+    .topnav-inner {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 0 2rem;
+      height: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 2rem;
+    }
+
+    .topnav-wordmark {
+      font-size: 0.8125rem;
+      font-weight: 500;
+      letter-spacing: -0.01em;
+      color: var(--text);
+      opacity: 0;
+      transition: opacity 0.3s ease;
+      white-space: nowrap;
+    }
+
+    .topnav-wordmark.show {
+      opacity: 1;
+    }
+
+    .topnav-links {
+      display: flex;
+      align-items: center;
+      gap: 0.25rem;
+      list-style: none;
+    }
+
+    .topnav-links a {
+      font-size: 0.8125rem;
+      font-weight: 450;
+      color: var(--text-faint);
+      text-decoration: none;
+      padding: 0.25rem 0.625rem;
+      border-radius: 4px;
+      transition: color 0.15s, background 0.15s;
+      white-space: nowrap;
+    }
+
+    .topnav-links a:hover {
+      color: var(--text);
+      background: var(--surface);
+    }
+
+    @media (max-width: 640px) {
+      .topnav-links { display: none; }
+    }
+
+    /* ─── OUTER LAYOUT ─── */
+    .layout {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 0 2rem;
+      display: grid;
+      grid-template-columns: 1fr;
+    }
+
+    @media (min-width: 1060px) {
+      .layout {
+        grid-template-columns: var(--toc-width) 1fr;
+        gap: 5rem;
+        padding: 0 3rem;
+        align-items: start;
+      }
+    }
+
+    /* ─── TOC SIDEBAR ─── */
+    .toc-sidebar {
+      display: none;
+    }
+
+    @media (min-width: 1060px) {
+      .toc-sidebar {
+        display: block;
+        position: sticky;
+        top: calc(var(--nav-height) + 2rem);
+        padding-top: 5.5rem;
+        max-height: calc(100vh - var(--nav-height) - 4rem);
+        overflow-y: auto;
+        scrollbar-width: none;
+      }
+
+      .toc-sidebar::-webkit-scrollbar {
+        display: none;
+      }
+    }
+
+    .toc-heading {
+      font-size: 0.625rem;
+      font-weight: 700;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: var(--text-faint);
+      margin-bottom: 1rem;
+    }
+
+    .toc-nav {
+      display: flex;
+      flex-direction: column;
+    }
+
+    .toc-link {
+      font-size: 0.8125rem;
+      font-weight: 400;
+      color: var(--text-faint);
+      text-decoration: none;
+      line-height: 1.45;
+      padding: 0.2rem 0 0.2rem 0.75rem;
+      border-left: 1.5px solid transparent;
+      margin-left: 0;
+      transition: color 0.15s, border-color 0.15s;
+      display: block;
+    }
+
+    .toc-link:hover {
+      color: var(--text-muted);
+    }
+
+    .toc-link.is-active {
+      color: var(--text);
+      border-left-color: var(--text);
+      font-weight: 500;
+    }
+
+    .toc-sub {
+      padding-left: 1.375rem;
+      font-size: 0.75rem;
+      color: var(--text-faint);
+    }
+
+    .toc-sub.is-active {
+      color: var(--text-muted);
+      border-left-color: var(--text-muted);
+      font-weight: 400;
+    }
+
+    .toc-gap {
+      height: 0.625rem;
+    }
+
+    /* ─── MAIN CONTENT ─── */
+    .content {
+      padding-top: var(--nav-height);
+      max-width: var(--reading-width);
+      width: 100%;
+    }
+
+    /* ─── HERO ─── */
+    .hero {
+      padding: 5.5rem 0 4.5rem;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .hero-kicker {
+      font-size: 0.6875rem;
+      font-weight: 700;
+      letter-spacing: 0.13em;
+      text-transform: uppercase;
+      color: var(--text-faint);
+      margin-bottom: 1.5rem;
+    }
+
+    .hero-title {
+      font-size: clamp(2.625rem, 5.5vw, 3.875rem);
+      font-weight: 700;
+      letter-spacing: -0.035em;
+      line-height: 1.08;
+      color: var(--text);
+      margin-bottom: 1.625rem;
+    }
+
+    .hero-subtitle {
+      font-size: 1.125rem;
+      font-weight: 400;
+      color: var(--text-muted);
+      line-height: 1.65;
+      max-width: 520px;
+      margin-bottom: 2.5rem;
+    }
+
+    .hero-meta {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 1rem;
+    }
+
+    .meta-pill {
+      font-size: 0.75rem;
+      font-weight: 500;
+      color: var(--text-faint);
+      background: var(--surface);
+      padding: 0.3rem 0.625rem;
+      border-radius: 99px;
+      border: 1px solid var(--border);
+    }
+
+    /* ─── OPENING QUOTE ─── */
+    .opening-quote {
+      padding: 3.5rem 0;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .opening-quote blockquote {
+      font-size: 1.125rem;
+      font-style: italic;
+      font-weight: 300;
+      line-height: 1.7;
+      color: var(--text-muted);
+      padding-left: 1.5rem;
+      border-left: 2px solid var(--border);
+    }
+
+    /* ─── ARTICLE SECTIONS ─── */
+    .article-section {
+      padding: var(--section-gap) 0;
+      border-bottom: 1px solid var(--border-light);
+    }
+
+    .article-section:last-of-type {
+      border-bottom: none;
+    }
+
+    .section-eyebrow {
+      font-size: 0.625rem;
+      font-weight: 700;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: var(--text-faint);
+      margin-bottom: 0.875rem;
+    }
+
+    .section-title {
+      font-size: clamp(1.5rem, 2.8vw, 2rem);
+      font-weight: 700;
+      letter-spacing: -0.025em;
+      line-height: 1.18;
+      color: var(--text);
+      margin-bottom: 1.75rem;
+    }
+
+    .section-lead {
+      font-size: 1.0625rem;
+      color: var(--text-muted);
+      line-height: 1.75;
+      margin-bottom: 0;
+    }
+
+    /* ─── SUBSECTIONS ─── */
+    .subsection {
+      margin-top: var(--subsection-gap);
+    }
+
+    .subsection-title {
+      font-size: 1.1875rem;
+      font-weight: 650;
+      letter-spacing: -0.018em;
+      line-height: 1.28;
+      color: var(--text);
+      margin-bottom: 1.125rem;
+    }
+
+    .sub-subsection {
+      margin-top: 2rem;
+    }
+
+    .sub-subsection-title {
+      font-size: 1rem;
+      font-weight: 600;
+      letter-spacing: -0.01em;
+      line-height: 1.4;
+      color: var(--text);
+      margin-bottom: 0.875rem;
+    }
+
+    /* ─── BODY TEXT ─── */
+    p {
+      margin-bottom: 1.25rem;
+    }
+
+    p:last-child {
+      margin-bottom: 0;
+    }
+
+    strong {
+      font-weight: 600;
+      color: var(--text);
+    }
+
+    em {
+      font-style: italic;
+    }
+
+    /* ─── LISTS ─── */
+    ul, ol {
+      margin: 1.125rem 0 1.25rem 1.375rem;
+    }
+
+    li {
+      margin-bottom: 0.5rem;
+      line-height: 1.7;
+    }
+
+    li:last-child {
+      margin-bottom: 0;
+    }
+
+    li > ul,
+    li > ol {
+      margin-top: 0.375rem;
+      margin-bottom: 0.375rem;
+    }
+
+    /* ─── DEFINITION BLOCK ─── */
+    .definition-block {
+      margin: 1.75rem 0;
+      padding: 1.375rem 1.5rem;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-left: 3px solid var(--text);
+    }
+
+    .definition-label {
+      font-size: 0.625rem;
+      font-weight: 700;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--text-faint);
+      margin-bottom: 0.5rem;
+    }
+
+    .definition-text {
+      font-size: 1rem;
+      color: var(--text-muted);
+      line-height: 1.7;
+    }
+
+    /* ─── CALLOUT ─── */
+    .callout {
+      margin: 1.75rem 0;
+      padding: 1.25rem 1.5rem;
+      background: var(--surface);
+      border-radius: 4px;
+    }
+
+    .callout p {
+      font-size: 0.9688rem;
+      color: var(--text-muted);
+      margin: 0;
+      line-height: 1.7;
+    }
+
+    /* ─── EXHIBIT PLACEHOLDER ─── */
+    .exhibit {
+      margin: 2rem 0;
+      padding: 1.375rem 1.5rem;
+      border: 1px dashed var(--border);
+      border-radius: 4px;
+    }
+
+    .exhibit-label {
+      font-size: 0.625rem;
+      font-weight: 700;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--text-faint);
+      margin-bottom: 0.375rem;
+    }
+
+    .exhibit-caption {
+      font-size: 0.875rem;
+      color: var(--text-faint);
+      font-style: italic;
+      line-height: 1.55;
+    }
+
+    /* ─── TABLE ─── */
+    .table-wrap {
+      overflow-x: auto;
+      margin: 2rem 0;
+      border: 1px solid var(--border);
+      border-radius: 4px;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.9063rem;
+      min-width: 560px;
+    }
+
+    thead {
+      background: var(--surface);
+    }
+
+    th {
+      text-align: left;
+      font-size: 0.6875rem;
+      font-weight: 700;
+      letter-spacing: 0.09em;
+      text-transform: uppercase;
+      color: var(--text-faint);
+      padding: 0.75rem 1rem;
+      border-bottom: 1px solid var(--border);
+      white-space: nowrap;
+    }
+
+    td {
+      padding: 0.875rem 1rem;
+      border-bottom: 1px solid var(--border-light);
+      vertical-align: top;
+      line-height: 1.6;
+      color: var(--text-muted);
+    }
+
+    td strong {
+      color: var(--text);
+    }
+
+    tr:last-child td {
+      border-bottom: none;
+    }
+
+    /* ─── FOOTNOTE ─── */
+    .footnote {
+      margin-top: 2rem;
+      padding-top: 1.5rem;
+      border-top: 1px solid var(--border-light);
+      font-size: 0.875rem;
+      color: var(--text-faint);
+      line-height: 1.65;
+    }
+
+    /* ─── EXPERIMENT CARDS ─── */
+    .experiment-card {
+      padding: 1.5rem;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      margin-top: 1.5rem;
+    }
+
+    .experiment-number {
+      font-size: 0.625rem;
+      font-weight: 700;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: var(--text-faint);
+      margin-bottom: 0.625rem;
+    }
+
+    .experiment-prompt {
+      font-size: 1rem;
+      font-weight: 550;
+      line-height: 1.5;
+      color: var(--text);
+      margin-bottom: 0.875rem;
+      letter-spacing: -0.01em;
+    }
+
+    .experiment-rationale {
+      font-size: 0.9063rem;
+      color: var(--text-muted);
+      line-height: 1.65;
+      margin-bottom: 1.125rem;
+    }
+
+    .experiment-links {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+    }
+
+    .experiment-link {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.3rem;
+      font-size: 0.8125rem;
+      font-weight: 500;
+      color: var(--text-muted);
+      text-decoration: none;
+      padding: 0.3125rem 0.75rem;
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      transition: color 0.15s, border-color 0.15s, background 0.15s;
+    }
+
+    .experiment-link:hover {
+      color: var(--text);
+      border-color: var(--text-muted);
+      background: var(--surface);
+    }
+
+    .experiment-link.disabled {
+      opacity: 0.4;
+      pointer-events: none;
+    }
+
+    /* ─── FOOTER ─── */
+    .site-footer {
+      padding: 4rem 0;
+      border-top: 1px solid var(--border);
+      margin-top: 2rem;
+    }
+
+    .footer-title {
+      font-size: 0.9375rem;
+      font-weight: 600;
+      letter-spacing: -0.01em;
+      color: var(--text);
+      margin-bottom: 0.625rem;
+    }
+
+    .footer-desc {
+      font-size: 0.875rem;
+      color: var(--text-faint);
+      line-height: 1.65;
+      max-width: 480px;
+    }
+
+    .footer-refs {
+      margin-top: 1.5rem;
+      padding-top: 1.5rem;
+      border-top: 1px solid var(--border-light);
+    }
+
+    .footer-refs-label {
+      font-size: 0.625rem;
+      font-weight: 700;
+      letter-spacing: 0.13em;
+      text-transform: uppercase;
+      color: var(--text-faint);
+      margin-bottom: 0.625rem;
+    }
+
+    .footer-refs p {
+      font-size: 0.875rem;
+      color: var(--text-faint);
+      line-height: 1.65;
+    }
+
+    /* ─── RESPONSIVE ─── */
+    @media (max-width: 768px) {
+      :root {
+        --section-gap: 4rem;
+        --subsection-gap: 2.25rem;
+      }
+
+      .hero {
+        padding: 3.5rem 0 3rem;
+      }
+
+      .layout {
+        padding: 0 1.25rem;
+      }
+
+      .hero-title {
+        font-size: 2.25rem;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <div id="progress-bar"></div>
+
+  <!-- ─── TOP NAV ─── -->
+  <nav class="topnav" id="topnav">
+    <div class="topnav-inner">
+      <span class="topnav-wordmark" id="topnav-wordmark">World Model Deep-Dive</span>
+      <ul class="topnav-links">
+        <li><a href="#intro">Intro</a></li>
+        <li><a href="#section-1">What Is a World Model</a></li>
+        <li><a href="#section-2">Who's Building</a></li>
+        <li><a href="#section-3">Bottlenecks</a></li>
+        <li><a href="#section-4">Experiments</a></li>
+      </ul>
+    </div>
+  </nav>
+
+  <!-- ─── LAYOUT ─── -->
+  <div class="layout">
+
+    <!-- ─── TOC SIDEBAR ─── -->
+    <aside class="toc-sidebar" aria-label="Table of contents">
+      <div class="toc-heading">Contents</div>
+      <nav class="toc-nav">
+        <a href="#intro" class="toc-link">Introduction</a>
+        <div class="toc-gap"></div>
+
+        <a href="#section-1" class="toc-link">01 — What Is a World Model?</a>
+        <a href="#s1-history" class="toc-link toc-sub">A Brief History</a>
+        <a href="#s1-definition" class="toc-link toc-sub">Definition</a>
+        <a href="#s1-taxonomy" class="toc-link toc-sub">Taxonomy</a>
+        <a href="#s1-2d" class="toc-link toc-sub">2D World Models</a>
+        <a href="#s1-latent" class="toc-link toc-sub">Latent Space Models</a>
+        <a href="#s1-3d" class="toc-link toc-sub">3D World Models</a>
+        <div class="toc-gap"></div>
+
+        <a href="#section-2" class="toc-link">02 — Who's Building Them?</a>
+        <a href="#s2-filming" class="toc-link toc-sub">Filming</a>
+        <a href="#s2-gaming" class="toc-link toc-sub">Gaming</a>
+        <a href="#s2-av" class="toc-link toc-sub">Autonomous Driving</a>
+        <a href="#s2-robotics" class="toc-link toc-sub">Robotics</a>
+        <a href="#s2-science" class="toc-link toc-sub">Scientific Simulation</a>
+        <div class="toc-gap"></div>
+
+        <a href="#section-3" class="toc-link">03 — Technical Bottlenecks</a>
+        <a href="#s3-2d" class="toc-link toc-sub">2D Generative Models</a>
+        <a href="#s3-3d" class="toc-link toc-sub">3D Generative Models</a>
+        <a href="#s3-latent" class="toc-link toc-sub">Latent Space Models</a>
+        <div class="toc-gap"></div>
+
+        <a href="#section-4" class="toc-link">04 — Experiments</a>
+      </nav>
+    </aside>
+
+    <!-- ─── MAIN CONTENT ─── -->
+    <main class="content">
+
+      <!-- HERO -->
+      <section class="hero">
+        <div class="hero-kicker">Research Deep-Dive</div>
+        <h1 class="hero-title">World Model<br>Deep-Dive</h1>
+        <p class="hero-subtitle">A technical analysis of what world models are, how they work, who's building them, and what's holding them back — written for a semi-technical audience.</p>
+        <div class="hero-meta">
+          <span class="meta-pill">~17 min read</span>
+          <span class="meta-pill">4 sections</span>
+          <span class="meta-pill">2D · Latent · 3D</span>
+        </div>
+      </section>
+
+      <!-- OPENING QUOTE -->
+      <div class="opening-quote">
+        <blockquote>
+          "The image of the world around us, which we carry in our head, is just a model. Nobody in his head imagines the world, government or country. He has only selected concepts, and relationships between them, and uses those to represent the real system."
+        </blockquote>
+      </div>
+
+      <!-- ─── INTRO ─── -->
+      <section class="article-section" id="intro">
+        <div class="section-eyebrow">Introduction</div>
+
+        <p>Google launched the Waymo World Model to enable autonomous driving simulation. World Labs recently raised an additional $1B from a who's-who of tech and finance — NVIDIA, AMD, Autodesk, Fidelity, and others. General Intuition raised $134M seed to use world models to help Ukrainian soldiers simulate and navigate life-threatening battlefield scenarios.</p>
+
+        <p>Each represents a bet that machines can learn to model and simulate the physical world. So what's behind all the world model hype?</p>
+
+        <p>This analysis is written for a semi-technical audience looking to understand the general intuition and different types of world models. It tackles four key questions:</p>
+
+        <ol>
+          <li><strong>What is a world model?</strong> A clear definition, taxonomy of different types of world models being developed today, and the research lineage behind each.</li>
+          <li><strong>Who's building them and what are they used for?</strong> A comparison of current leading approaches — mapping use cases and applications across key companies in the space.</li>
+          <li><strong>What's holding them back?</strong> Core technical bottlenecks across different approaches.</li>
+          <li><strong>Let's play.</strong> Hands-on experiments across different types of world models and what we found.</li>
+        </ol>
+      </section>
+
+      <!-- ─── SECTION 1 ─── -->
+      <section class="article-section" id="section-1">
+        <div class="section-eyebrow">Section 01</div>
+        <h2 class="section-title">What Is a World Model?</h2>
+        <p class="section-lead">Over the past two years, the term "world model" has been stretched almost beyond recognition — applied by researchers, companies, and VCs to everything from large language models to game engines to simple predictive simulators, regardless of what was actually under the hood. Getting the definition right matters, because the type of world model determines what it can and can't do.</p>
+
+        <!-- Brief History -->
+        <div class="subsection" id="s1-history">
+          <h3 class="subsection-title">A Brief History</h3>
+
+          <p>The idea of a world model predates modern AI entirely. In 1943, psychologist Kenneth Craik proposed that the human mind works by constructing small-scale models of reality to anticipate events — essentially, that thinking is a form of simulation. Elon Musk has since claimed there's a billion-to-one chance we're not already living in one.</p>
+
+          <p>But the engineering question is more grounded: can machines learn to simulate their world well enough to act intelligently within it? The concept re-emerged in reinforcement learning research through the 1990s and 2000s, where model-based RL agents learned internal representations of their environments to plan ahead without requiring exhaustive real-world interaction. The term "world model" was eventually coined by David Ha and Jürgen Schmidhuber in their 2018 research.</p>
+        </div>
+
+        <!-- Definition -->
+        <div class="subsection" id="s1-definition">
+          <h3 class="subsection-title">Definition</h3>
+
+          <div class="definition-block">
+            <div class="definition-label">Definition</div>
+            <div class="definition-text">A <strong>world model</strong> is an <strong>action-conditioned forward dynamics model</strong>. Given a state and an action, the model can predict the next resulting state.</div>
+          </div>
+
+          <p>Video generation models like Sora — which generate observations of the world but don't model the consequences of acting within it — are not the type of world model this paper focuses on.</p>
+        </div>
+
+        <!-- Taxonomy -->
+        <div class="subsection" id="s1-taxonomy">
+          <h3 class="subsection-title">World Model Taxonomy</h3>
+
+          <p>"World models" can be an overloaded term, making categorization challenging. A useful taxonomy emerges along two axes:</p>
+
+          <ol>
+            <li><strong>How does the model handle space?</strong> (2D vs. 3D)</li>
+            <li><strong>What is the model's use case?</strong> (Entertainment vs. Robotics vs. AV)</li>
+          </ol>
+
+          <div class="exhibit">
+            <div class="exhibit-label">Exhibit</div>
+            <div class="exhibit-caption">World Model Taxonomy — mapped by use case (columns) and spatial dimensionality of the model (rows)</div>
+          </div>
+
+          <p>The remainder of this section focuses on how models handle modeled space. Section 2 covers applications and company use cases.</p>
+        </div>
+
+        <!-- 2D World Models -->
+        <div class="subsection" id="s1-2d">
+          <h3 class="subsection-title">2D World Models</h3>
+
+          <p>2D generative world models (e.g., Google's Genie, Tesla's World Simulator, NVIDIA Cosmos) are the most intuitive entry point. The core idea is straightforward: given what the world looked like up to this moment, and given the action just taken, predict what it looks like next — frame by frame, pixel by pixel. It's world modeling as video prediction.</p>
+
+          <div class="sub-subsection">
+            <h4 class="sub-subsection-title">Video generation vs. 2D world models — an important distinction</h4>
+
+            <p>Before going further, it's worth drawing a line that the industry has frequently blurred. A video generation model produces a fixed artifact — a clip that plays from start to finish regardless of what a viewer does. Pika, Runway's Gen-4, and Luma are impressive generative systems, but they are not world models under our definition. They generate observations of the world without modeling the consequences of acting within it.</p>
+
+            <p>A 2D generative world model produces an <em>environment</em> — one that responds to actions, maintains state over time, and evolves differently depending on what an agent does inside it. The output isn't a clip to watch; it's a space to act in. <strong>The defining characteristic is interactivity.</strong> Remove it, and you have a video generator. Keep it, and you have a world model.</p>
+          </div>
+
+          <div class="sub-subsection">
+            <h4 class="sub-subsection-title">Architecture: two approaches</h4>
+
+            <p>This lineage traces directly back to Ha & Schmidhuber's 2018 <em>World Models</em> paper, which first demonstrated an agent could learn inside its own imagination. The paper proposed splitting an agent into three parts:</p>
+
+            <ul>
+              <li>A <strong>visual encoder (V)</strong> that compresses raw pixel observations into a compact representation — like how your eye doesn't send every photon to your brain, but a compressed summary.</li>
+              <li>A <strong>memory model (M)</strong>, a recurrent neural network that predicts what comes next — essentially the world model itself.</li>
+              <li>A <strong>controller (C)</strong>, a small, simple decision-maker that acts based on V and M's outputs.</li>
+            </ul>
+
+            <p>What changed in the years that followed was the quality of the underlying generative machinery. Two distinct architectural approaches emerged to solve the same core problem — predicting the next frame conditioned on an action — and they make meaningfully different tradeoffs:</p>
+
+            <ol>
+              <li><strong>Autoregressive generation.</strong> The model generates each frame by predicting spatial tokens in order (patch 1, then patch 2, then patch 3...). Google's Genie takes this approach — using a transformer that conditions on past frames and actions to generate what comes next. These models tend to be faster at inference and better at maintaining temporal consistency across frames.</li>
+              <li><strong>Diffusion generation.</strong> Generate the next frame by starting with a blurry, noisy image and progressively refining it, step by step — until a sharp, coherent frame emerges. Think of it like a photograph developing in a darkroom. Google's GameNGen and DIAMOND take this approach, and Decart's Oasis combines both in a diffusion transformer. Diffusion models tend to produce higher visual fidelity and handle uncertainty more gracefully — but were long considered too slow for real-time interactive use. GameNGen and DIAMOND were the first to demonstrate this wasn't an inherent limitation, just an engineering one.</li>
+            </ol>
+
+            <p>The field hasn't settled on a single approach. The most recent models, like Oasis, are beginning to combine both, suggesting the distinction may matter less going forward than it does today.</p>
+          </div>
+
+          <div class="callout">
+            <p>2D generative world models are not just the most intuitive — they are currently the most capable and widely deployed. The most important reason is data: training requires video paired with actions, comparatively easier to collect than approaches requiring specialized data (e.g., 3D). Billions of hours of humans driving, playing games already exist and can be repurposed directly. Legibility is another advantage: because the outputs are visual, 2D world models are easy to evaluate, demo, and iterate on.</p>
+          </div>
+
+          <p>That said, they carry a structural ceiling. With no explicit representation of geometry or physics, predicting appearances rather than structure, errors accumulate across frames, temporal consistency degrades over time, and compute costs are high.</p>
+
+          <div class="footnote">
+            <sup>1</sup> <em>Temporal consistency</em> refers to a model's ability to maintain coherent, stable elements across consecutive frames over time — e.g., a wall stays where it was, an object doesn't change shape mid-scene, physics doesn't quietly break down.
+          </div>
+        </div>
+
+        <!-- Latent Space World Models -->
+        <div class="subsection" id="s1-latent">
+          <h3 class="subsection-title">Latent Space World Models</h3>
+
+          <p>Latent world models compress observations into compact abstract representations and predict how those representations evolve over time given different actions. All world models in practice have internal latent representations — the difference is not one of kind, but of supervision: whether you compute losses on semantic outputs only ("latent"/JEPA), or compute reconstruction losses on raw observations (e.g., pixel).</p>
+
+          <p>This is not a binary design choice — a model can predict semantic outputs at every step while computing reconstruction losses only every 10 steps. The primary advantage of latent models is efficiency: by skipping pixel reconstruction, they are significantly faster to train and run.</p>
+
+          <p>Several schools of thought have emerged around latent space models, spanning reinforcement learning, latent planning with learned dynamics, and energy-based approaches. These categories are not clean separations; the lineages are deeply intertwined, and the divisions reflect ideology as much as methodology.</p>
+
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Lineage</th>
+                  <th>Overview</th>
+                  <th>Application</th>
+                  <th>Key Papers</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><strong>Reinforcement Learning</strong></td>
+                  <td>Agents learn by practicing entirely inside an imagined world model rather than the real environment. Architecture: RSSM (Recurrent State Space Model) maintains a compressed hidden state that updates step by step as the agent acts. Built for action-first — the world model exists to develop better instincts, not to understand the world for its own sake.</td>
+                  <td>Continuous control tasks (e.g., robotics)</td>
+                  <td>Dyna (1990), SimPLe (2019), PlaNet (2019), Dreamer V1–V4 (2020–2025)</td>
+                </tr>
+                <tr>
+                  <td><strong>Latent Planning</strong></td>
+                  <td>Rather than developing instincts through imagination, the agent deliberates at every single move — consulting its world model to simulate possible futures and pick the best one. The architecture invents an abstract latent space optimized purely for planning, not for resembling reality. Built for discrete, structured problems where exhaustive look-ahead pays off.</td>
+                  <td>Any domain with a structured, well-defined action space (e.g., board games)</td>
+                  <td>MuZero (2020), EfficientZero (2021), EfficientZero V2 (2024)</td>
+                </tr>
+                <tr>
+                  <td><strong>Energy-Based (JEPA)</strong></td>
+                  <td>Rather than generating pixel outputs, the model scores compatibility between predictions and reality in latent space — learning meaning rather than appearance. Architecture: three components (context encoder, predictor, target encoder) with no pixel decoder. Built for understanding-first; action-conditioning was added later as an extension.</td>
+                  <td>Visual understanding, video prediction, representation learning for downstream tasks (e.g., robotics)</td>
+                  <td>JEPA (2022), I-JEPA (2023), V-JEPA (2024), LeWorldModel (2026)</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- 3D World Models -->
+        <div class="subsection" id="s1-3d">
+          <h3 class="subsection-title">3D World Models</h3>
+
+          <p>3D-based generative world models treat the world as a navigable space — one with depth, volume, and geometry. Their core objective: reconstruct 3D structure from 2D images captured across different angles. The result is consistent, navigable 3D environments: objects stay where you left them, rooms look the same when revisited, and spatial relationships hold across long horizons.</p>
+
+          <p>Two most prominent methods are used:</p>
+
+          <div class="sub-subsection">
+            <h4 class="sub-subsection-title">NeRF — Neural Radiance Fields</h4>
+            <p>NeRFs (Mildenhall et al., 2020) encode a 3D scene inside a neural network. Given any position in space and any viewing direction, the network predicts what color and density exists there, allowing photorealistic images to be rendered from any angle — including angles never seen during training.</p>
+          </div>
+
+          <div class="sub-subsection">
+            <h4 class="sub-subsection-title">Gaussian Splatting</h4>
+            <p>Gaussian Splatting (Kerbl et al., 2023) achieves the same goal differently. A Gaussian is simply a smooth blob — mathematically it's a bell curve, but in 3D space it's an ellipsoid. Think of it like a cloud of smoke: densest at the center, fading out smoothly toward the edges. Rather than encoding the scene inside a network, it represents it explicitly as a collection of millions of 3D blobs, each with a position, size, color, and opacity. Rendering is just projecting and blending those blobs onto the image plane — no network queries needed, which is why it runs in real time while NeRF takes minutes.</p>
+          </div>
+
+          <p>The limitation of 3D world models is structural, which we cover in detail in Section 3.</p>
+        </div>
+      </section>
+
+      <!-- ─── SECTION 2 ─── -->
+      <section class="article-section" id="section-2">
+        <div class="section-eyebrow">Section 02</div>
+        <h2 class="section-title">Who's Building World Models and What Are They Being Built For?</h2>
+        <p class="section-lead">Section 1 established what world models are and how they work. This section maps where they're being deployed — the earliest commercial applications taking shape and the technical approaches different players are betting on.</p>
+
+        <!-- Filming -->
+        <div class="subsection" id="s2-filming">
+          <h3 class="subsection-title">Filming</h3>
+
+          <p>One of the early commercial bets for world models is film and video production. The best example is World Labs. World Labs' first product, Marble, is a 3D World Model using Gaussian Splatting techniques discussed in Section 1. The architectural choice is deliberate: film production demands geometric consistency in a way that 2D generative approaches can't guarantee. A director needs to return to the same set from a different angle and have it look identical. 3D representations make that promise; pixel prediction models don't.</p>
+
+          <p>The current limitation is dynamism — static architectural environments are well within reach, but simulating crowds, water, fire, or cloth at production quality remains an open problem.</p>
+
+          <p>A case study with HTC VIVE's virtual production system demonstrated this efficiency: three creators with no 3D experience generated over ten unique 3D environments — from futuristic interiors to moody cityscapes — and filmed social content inside them in a single afternoon, a task that would traditionally require weeks of modeling and rendering work.</p>
+        </div>
+
+        <!-- Gaming -->
+        <div class="subsection" id="s2-gaming">
+          <h3 class="subsection-title">Gaming</h3>
+
+          <p>Gaming is one of the clearest examples of the data flywheel dynamic in world models — the more users play, the more interaction data is collected, and the better the model gets. Two companies in this space are pursuing meaningfully different strategies:</p>
+
+          <ul>
+            <li><strong>Moonlake AI</strong> builds the world model as the product. Its product Reverie generates interactive 3D environments from natural language prompts. Technically, it achieves persistence — edits like a crumbling wall hold across frames — by conditioning the model on 3D structural signals rather than just pixel sequences.</li>
+            <li><strong>General Intuition</strong> employs a data-centric strategy, leveraging its spinout from Medal, which captures 2 billion gameplay clips annually. The near-term product is AI-powered NPCs. The longer-term bet is that games are the most effective environment for AI to learn to understand the real world, as they provide a verifiable domain for spatial-temporal reasoning where every action can be objectively assessed.</li>
+          </ul>
+        </div>
+
+        <!-- Autonomous Driving -->
+        <div class="subsection" id="s2-av">
+          <h3 class="subsection-title">Autonomous Driving</h3>
+
+          <p>Autonomous driving presents the "long tail" challenge: the rare, unpredictable, and dangerous scenarios that cause accidents are nearly impossible to gather training data for in the real world. World models solve this by simulating the extreme tail end of reality at scale — floods, wrong-way drivers, elephants crossing the street.</p>
+
+          <div class="sub-subsection">
+            <h4 class="sub-subsection-title">Tesla</h4>
+
+            <p>Tesla utilizes a world model primarily for "eval" — acting as a high-fidelity neural simulator to stress-test driving policies prior to real-world deployment. Tesla's world model uses state-action data to fine-tune its E2E foundation model trained for driving. The world model allows Tesla to generate a full closed-loop simulation: the policy acts, the world model predicts what happens next, the policy responds to that prediction, and the loop continues.</p>
+
+            <p>This allows Tesla to evaluate policy behavior across a vast range of scenarios without physical hardware:</p>
+
+            <ul>
+              <li><strong>Real world replay.</strong> Resimulating historical edge cases to evaluate how a new policy build would behave.</li>
+              <li><strong>Counterfactual testing.</strong> Altering variables (e.g., changing weather to a wet road, introducing a sudden cut-in, or blocking a lane) to test hundreds of parallel futures.</li>
+              <li><strong>Extreme stress-testing.</strong> Generating rare, hazardous edge cases that seldom occur on public roads.</li>
+              <li><strong>Risk-free iteration.</strong> Improving safety profiles at massive scale without exposing drivers or pedestrians to physical risk.</li>
+            </ul>
+
+            <p>Furthermore, Tesla is generalizing this neural simulation framework to Optimus, allowing the humanoid robot to simulate and evaluate its physical interactions with the world. Wayve's approach resembles Tesla's.</p>
+          </div>
+
+          <div class="sub-subsection">
+            <h4 class="sub-subsection-title">Waymo</h4>
+
+            <p>In February 2026, Google published the Waymo World Model, built on top of Google DeepMind's Genie 3. Waymo's use case is more or less similar to Tesla's — using world models for training and evaluation to explore the long tail of situations rarely observed by its fleet.</p>
+
+            <p>What's different is modality: Waymo simulates camera + 3D lidar + HD maps using post-training from 2D video.</p>
+
+            <div class="exhibit">
+              <div class="exhibit-label">Exhibit</div>
+              <div class="exhibit-caption">How Tesla trains and uses its world model for AV and Robotics — Source: Building Foundational Models for Robotics at Tesla</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Robotics -->
+        <div class="subsection" id="s2-robotics">
+          <h3 class="subsection-title">Robotics</h3>
+
+          <p>Robotics and autonomous driving share more than intuition suggests — they both require an agent to perceive a physical environment, model what happens next, and act accordingly. Tesla makes this connection explicit: the same world model architecture underlying FSD is being transferred directly to its Optimus humanoid robot, a bet that the dynamics of navigating roads and navigating physical spaces are similar enough to share a foundation.</p>
+
+          <p>But robotics introduces challenges that autonomous driving doesn't face. A car operates in a relatively constrained environment. A robot operating in an unstructured environment faces contact-rich manipulation, deformable objects, and unpredictable human interaction. Picking up a coffee cup, folding laundry, assembling a component — these require a world model that understands fine-grained physical dynamics, not just navigation.</p>
+
+          <p>Two use cases are currently emerging:</p>
+
+          <div class="sub-subsection">
+            <h4 class="sub-subsection-title">World model as a simulator</h4>
+
+            <p>This approach uses world models to replace traditional physics simulators like IsaacSim, MuJoCo, and ManiSkill. Traditional simulators are hand-engineered — researchers manually define physics rules, object properties, and environment dynamics. They work well for structured, predictable tasks but struggle with the messiness of the real world: deformable objects, complex contact dynamics, and the infinite variety of unstructured environments. A learned world model sidesteps this by inferring inverse dynamics from real-world data. This unlocks four concrete capabilities:</p>
+
+            <ul>
+              <li><strong>Cheaper data generation.</strong> Given a starting frame and a language instruction ("pick up the cup"), the world model generates synthetic video clips of a robot completing the task. An inverse dynamics model then automatically labels those clips with actions, producing robot policy training data at a fraction of the cost of physical collection. DreamGen and GR00T N1 use this approach.</li>
+              <li><strong>Inference-time planning.</strong> Rather than committing to a single action, the robot simulates several possible futures inside the world model and selects the most promising one. The main challenge is latency — the simulation must run fast enough for real-time control.</li>
+              <li><strong>Policy evaluation.</strong> Before touching physical hardware, a robot policy can be stress-tested inside the world model — including adversarial scenarios designed to surface safety failures early.</li>
+              <li><strong>Learning real-world dynamics.</strong> Papers like DayDreamer and Robotic World Model learn the dynamics of the real world directly from real robot interactions. Like Dreamer, they operate in latent space — but they don't predict images, only the physically relevant next state (joint positions, forces, contact signals). The result is a world model grounded in how the real world actually behaves, not how a simulator approximates it.</li>
+            </ul>
+          </div>
+
+          <div class="sub-subsection">
+            <h4 class="sub-subsection-title">World model as a policy</h4>
+
+            <p>Instead of using the video model to train or evaluate a separate controller, you use it as the controller itself — typically using an action-conditioned world model (e.g., V-JEPA 2, DreamZero). The robot's decision-making is baked directly into the video model. Because the native outputs are videos rather than robot actions, several methods have been developed to obtain control signals:</p>
+
+            <ul>
+              <li><strong>Generate video and actions simultaneously.</strong> Bolt an action decoder alongside the video model. The model generates video frames and robot actions at the same time, in one pass.</li>
+              <li><strong>Use the video model as a feature extractor, not a generator.</strong> Rather than generating full video, you only use the video model's internal representations — skipping the expensive generation step to make real-time control more feasible.</li>
+              <li><strong>Generate a desired future video, then translate to actions (open-loop).</strong> The model first generates a video of what success looks like, and then a separate inverse dynamics model watches that video and figures out what actions would produce it.</li>
+              <li><strong>Generate a desired future video, then translate to actions (closed-loop).</strong> Same idea as open-loop, but the model constantly updates its generated video based on what's actually happening in the real world — like an architect who checks the building site after every wall goes up and revises the plans accordingly.</li>
+            </ul>
+          </div>
+        </div>
+
+        <!-- Scientific Simulation -->
+        <div class="subsection" id="s2-science">
+          <h3 class="subsection-title">Scientific Simulation</h3>
+
+          <p>Scientific simulation is perhaps the highest-stakes application of world models — and the least discussed. Traditional simulation requires researchers to already know the rules: write down the physics equations, then compute forward. World models offer a different path: learn the dynamics directly from experimental data, without needing to know the underlying equations first.</p>
+
+          <p>This has meaningful implications across molecular dynamics, climate modeling, materials discovery, and nuclear fusion — domains where the cost of physical experimentation is enormous and the value of faster, cheaper simulation is correspondingly high.</p>
+
+          <p>Most of these applications remain research-stage or narrow deployments — the general-purpose scientific world model doesn't exist yet. But the early signals are compelling enough to watch closely.</p>
+        </div>
+      </section>
+
+      <!-- ─── SECTION 3 ─── -->
+      <section class="article-section" id="section-3">
+        <div class="section-eyebrow">Section 03</div>
+        <h2 class="section-title">Core Technical Bottlenecks</h2>
+
+        <!-- 2D Bottlenecks -->
+        <div class="subsection" id="s3-2d">
+          <h3 class="subsection-title">2D Generative Models</h3>
+
+          <p>Video-centric world models are impressive in short bursts. Genie's beta program, for instance, can sustain coherent interactive environments for up to 60 seconds.</p>
+
+          <p>However, over longer horizons, they suffer from <strong>spatiotemporal inconsistency</strong>: the model's internal representation of the world gradually drifts from coherence. This manifests as failures of <em>object permanence</em>, where items disappear or change properties mid-scene; <em>spatial drift</em>, where a room looks different when you retrace your steps; and violations of <em>basic causal dynamics</em>, where objects pass through surfaces or liquids ignore gravity.</p>
+
+          <p>The deeper technical issue is <strong>compounding rollout error (model drift)</strong>. World models simulate the consequences of an agent's actions by chaining predictions: the model imagines step 1, predicts step 2 from that, step 3 from step 2 — and errors accumulate exponentially. By step 10 of a robot manipulation task, the imagined world bears little resemblance to reality.</p>
+
+          <p>A second structural limitation is <strong>control latency</strong> caused by architectural inheritance. Models like Genie 3 are fine-tuned from general-purpose video generation models — in Genie 3's case, built on top of Veo 3. This foundation optimizes for visual plausibility over physical accuracy, which creates a ceiling for applications requiring precise real-time interaction. This hits hard for robot training specifically, where a model needs to faithfully simulate fine-grained real-time contact dynamics (Genie has a reported action-to-render latency of ~1.8 seconds).</p>
+
+          <p>The third limitation is <strong>compute cost</strong>. Current 2D generative world models must regenerate every pixel from scratch at each step — and to maintain temporal consistency, they condition on an expanding window of past frames. The cost compounds as the sequence grows: a model simulating 100 steps is doing dramatically more work than one simulating 10, which makes long-horizon simulation increasingly expensive and creates a hard practical ceiling for real-time applications.</p>
+        </div>
+
+        <!-- 3D Bottlenecks -->
+        <div class="subsection" id="s3-3d">
+          <h3 class="subsection-title">3D Generative Models</h3>
+
+          <p>The core strength of 3D world models is their explicit geometric representation — rather than generating pixels from scratch at every timestep, they ground generation in a persistent 3D scene scaffold. The result is that object identity and spatial layout are preserved by construction, not learned statistically. Objects stay where you left them. Rooms look the same when revisited. Basic physical constraints hold across long horizons without needing to be re-derived from pixels at every step. This also makes them significantly cheaper to run than 2D generative models.</p>
+
+          <p>The tradeoffs:</p>
+
+          <ol>
+            <li><strong>Can't handle dynamic content.</strong> These models are designed for static scenes and struggle with dynamic content — water flowing, complex deformations — the type of interaction that matters for physical manipulation and general-purpose simulation.</li>
+            <li><strong>Geometry vs. physics.</strong> A Gaussian splat encodes where things are and what they look like — it does not encode how they behave when forces are applied. The explicit structure that solves the consistency problem simultaneously prevents the model from internalizing the physical dynamics that make a simulator useful. This limitation cuts across both 2D and 3D world models — neither approach guarantees understanding of physical causality.</li>
+            <li><strong>Data scarcity.</strong> 3D representations require multi-view video or depth data (e.g., LiDAR) for training, which is expensive and technically demanding to collect at scale. The richness and environmental variety achievable with internet-scale 2D video simply isn't available in 3D, limiting current models to narrow, curated domains (e.g., driving scenes, indoor rooms, specific object categories).</li>
+          </ol>
+        </div>
+
+        <!-- Latent Bottlenecks -->
+        <div class="subsection" id="s3-latent">
+          <h3 class="subsection-title">Latent Space Models</h3>
+
+          <p>Latent world models sidestep the rendering constraints that limit both 2D and 3D approaches — no pixel generation, no geometric scaffolding, just compressed abstract representations of what matters. This makes them significantly cheaper to run and architecturally flexible in ways the other two approaches aren't.</p>
+
+          <p>The core tradeoff is that <strong>compression is always lossy</strong>. When an observation is encoded into a lower-dimensional latent state, information is discarded — and the model chooses what to discard based on what it learned during training, not necessarily what matters for the task at hand. A model might faithfully preserve texture and color while silently dropping the subtle structural cues that are actually decision-critical: the slight lean of an unstable tower, the trajectory of a moving object, the shadow that signals an obstacle just outside the frame.</p>
+
+          <p>These details may be imperceptible to a human glancing at a scene but essential to an agent acting within it.</p>
+        </div>
+      </section>
+
+      <!-- ─── SECTION 4 ─── -->
+      <section class="article-section" id="section-4">
+        <div class="section-eyebrow">Section 04</div>
+        <h2 class="section-title">Experiments Across World Models</h2>
+        <p class="section-lead">Even though there are a lot of world model companies out there, the actual products available for testing and prototyping are limited. We tested the models that are either already available or responded to our inquiry: World Labs Marble and Google Project Genie.</p>
+
+        <!-- Experiment 1 -->
+        <div class="subsection">
+          <div class="experiment-card">
+            <div class="experiment-number">Prompt 01</div>
+            <div class="experiment-prompt">Brutalist Library — Golden Hour</div>
+            <p class="experiment-rationale">Tests geometric consistency, lighting fidelity, and material rendering — core strengths of 3D approaches. Reveals whether 2D models maintain consistent shadows and reflections from different angles.</p>
+            <div class="experiment-links">
+              <a href="https://marble.worldlabs.ai/world/6de100b3-6534-4be4-b99e-6f780f470779" class="experiment-link" target="_blank" rel="noopener noreferrer">Marble ↗</a>
+              <a href="https://labs.google/fx/projectgenie/tools/projectgenie/692060b4-aecf-4e79-ab4e-5271413f62f9" class="experiment-link" target="_blank" rel="noopener noreferrer">Project Genie ↗</a>
+            </div>
+          </div>
+        </div>
+
+        <!-- Experiment 2 -->
+        <div class="subsection">
+          <div class="experiment-card">
+            <div class="experiment-number">Prompt 02</div>
+            <div class="experiment-prompt">A coastal cliffside at dusk during a storm. Waves crash against the rocks below, sea spray rises, and tall grass bends in the wind. A narrow dirt path runs along the edge.</div>
+            <p class="experiment-rationale">Targets the dynamic content weakness of 3D models — water, wind, grass movement. Tests whether each platform can handle multiple simultaneous dynamic elements or freezes them into a static scene.</p>
+            <div class="experiment-links">
+              <a href="https://marble.worldlabs.ai/world/d91117e9-fae9-4dc3-b712-49763db64b3b" class="experiment-link" target="_blank" rel="noopener noreferrer">Marble ↗</a>
+              <a href="https://labs.google/fx/projectgenie/tools/projectgenie/3e4ce51d-1753-48d9-911e-6b1cff840b27" class="experiment-link" target="_blank" rel="noopener noreferrer">Project Genie ↗</a>
+            </div>
+          </div>
+        </div>
+
+        <!-- Experiment 3 -->
+        <div class="subsection">
+          <div class="experiment-card">
+            <div class="experiment-number">Prompt 03</div>
+            <div class="experiment-prompt">A cluttered workshop with tools hanging on pegboards, a half-assembled motorcycle on a workbench, oil stains on the concrete floor, and a single bare bulb overhead.</div>
+            <p class="experiment-rationale">Tests object diversity, spatial layout coherence, and fine-grained detail rendering. Also a good stress test for navigability — can you move around the motorcycle without geometry breaking down?</p>
+            <div class="experiment-links">
+              <a href="#" class="experiment-link disabled">Marble — forthcoming</a>
+              <a href="https://labs.google/fx/projectgenie/tools/projectgenie/5abdfb77-3f38-4412-9f3f-6d80ab0f1402" class="experiment-link" target="_blank" rel="noopener noreferrer">Project Genie ↗</a>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ─── FOOTER ─── -->
+      <footer class="site-footer">
+        <div class="footer-title">World Model Deep-Dive</div>
+        <p class="footer-desc">A technical analysis of the state of world models — what they are, who's building them, and what's holding them back. Written for a semi-technical audience.</p>
+        <div class="footer-refs">
+          <div class="footer-refs-label">Further Reading</div>
+          <p>Packy McCormick &amp; Pim de Witte — History of world models. <em>A Step Toward World Models: A Survey on Robotic Manipulation</em> (survey paper).</p>
+        </div>
+      </footer>
+
+    </main>
+  </div>
+
+  <script>
+    // ─── Progress bar
+    const progressBar = document.getElementById('progress-bar');
+    const topnav = document.getElementById('topnav');
+    const wordmark = document.getElementById('topnav-wordmark');
+    const hero = document.querySelector('.hero');
+
+    window.addEventListener('scroll', () => {
+      const scrolled = window.scrollY;
+      const total = document.documentElement.scrollHeight - window.innerHeight;
+      progressBar.style.width = (scrolled / total * 100) + '%';
+
+      topnav.classList.toggle('at-scroll', scrolled > 10);
+      wordmark.classList.toggle('show', scrolled > hero.offsetHeight * 0.6);
+    }, { passive: true });
+
+    // ─── TOC scroll-spy
+    const tocLinks = document.querySelectorAll('.toc-link');
+    const targets = Array.from(tocLinks)
+      .map(link => link.getAttribute('href'))
+      .filter(href => href && href.startsWith('#'))
+      .map(href => document.querySelector(href))
+      .filter(Boolean);
+
+    const observer = new IntersectionObserver((entries) => {
+      entries.forEach(entry => {
+        if (entry.isIntersecting) {
+          const id = '#' + entry.target.id;
+          tocLinks.forEach(link => {
+            link.classList.toggle('is-active', link.getAttribute('href') === id);
+          });
+        }
+      });
+    }, {
+      rootMargin: '-15% 0px -75% 0px',
+      threshold: 0
+    });
+
+    targets.forEach(el => observer.observe(el));
+  </script>
+
+</body>
+</html>

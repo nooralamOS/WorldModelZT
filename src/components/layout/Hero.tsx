@@ -5,6 +5,23 @@ type HeroProps = {
   meta: ArticleMeta;
 };
 
+export function HeroBody({ meta }: HeroProps) {
+  return (
+    <>
+      <div className="mt-8 max-w-[42rem]">
+        <Lead>{meta.subtitle}</Lead>
+      </div>
+      <div className="mt-8 flex flex-wrap items-center gap-x-6 gap-y-2 font-mono text-xs uppercase tracking-[0.14em] text-muted">
+        <span>Research Deep-Dive</span>
+        <span aria-hidden className="hidden sm:inline text-line-strong">/</span>
+        <span>{meta.readingTimeMinutes} min read</span>
+        <span aria-hidden className="text-line-strong">/</span>
+        <span>{meta.sectionCount} sections</span>
+      </div>
+    </>
+  );
+}
+
 export function Hero({ meta }: HeroProps) {
   return (
     <header

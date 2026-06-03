@@ -7,7 +7,7 @@ export const article: Article = {
   epigraph: {
     quote:
       "The image of the world around us, which we carry in our head, is just a model. Nobody in his head imagines the world, government or country. He has only selected concepts, and relationships between them, and uses those to represent the real system.",
-    attribution: "Kenneth Craik, The Nature of Explanation (1943)",
+    attribution: "Jay Wright Forrester",
   },
   readingTimeMinutes: 42,
   sectionCount: 4,
@@ -114,6 +114,10 @@ export const article: Article = {
               alt: "Taxonomy matrix of world models by spatial dimensionality and use case",
               caption:
                 "Exhibit: World Model Taxonomy along Two Axis — Mapped by use case (columns) and spatial dimensionality of the model (rows)",
+            },
+            {
+              type: "paragraph",
+              text: "Note: While companies such as Sunday Robotics, Physical Intelligence, and Generalist have not published formal world model research, public forums, including posts on X, contain references to active research threads in this area.",
             },
             {
               type: "paragraph",
@@ -507,15 +511,18 @@ export const article: Article = {
       id: "section-4",
       title: "Experiments across world models",
       number: 4,
-      lead: "Even though there are a lot of World Model companies out there, the actual products that are available for testing / prototyping are limited. We have tried the models that are either 1) now already available, 2) responded to our inquiry.",
+      lead: "Though there are many World Model companies out there, products available for testing / prototyping are limited. We have designed three prompts that test the limits of different types of world models and tried to implement the models available for the public.",
       subsections: [
         {
           id: "experiments-overview",
           title: "Overview",
           blocks: [
             {
-              type: "paragraph",
-              text: "Toggle: Tasks – 3 prompts. Model providers – World Lab Marble, Google Project Genie, [Moonlake, Odyssey].",
+              type: "list",
+              items: [
+                "Tasks — 3 prompts",
+                "Model providers — World Labs Marble, Google Project Genie, Moonlake, Odyssey",
+              ],
             },
           ],
         },
@@ -524,14 +531,28 @@ export const article: Article = {
           title: "Prompt #1: Brutalist Library Golden Hour",
           blocks: [
             {
-              type: "paragraph",
-              text: "Rationale: Tests geometric consistency, lighting fidelity, and material rendering — core strengths of 3D approaches. Reveals whether 2D models maintain consistent shadows and reflections from different angles.",
-            },
-            {
-              type: "list",
-              items: [
-                "Marble: https://marble.worldlabs.ai/world/6de100b3-6534-4be4-b99e-6f780f470779",
-                "Project Genie: https://labs.google/fx/projectgenie/tools/projectgenie/692060b4-aecf-4e79-ab4e-5271413f62f9",
+              type: "experiment-card",
+              number: "Prompt 01",
+              prompt: "Brutalist Library — Golden Hour",
+              rationale:
+                "Tests geometric consistency, lighting fidelity, and material rendering — core strengths of 3D approaches. Reveals whether 2D models maintain consistent shadows and reflections from different angles.",
+              links: [
+                {
+                  label: "Marble ↗",
+                  href: "https://marble.worldlabs.ai/world/6de100b3-6534-4be4-b99e-6f780f470779",
+                },
+                {
+                  label: "Project Genie ↗",
+                  href: "https://labs.google/fx/projectgenie/tools/projectgenie/e5482f81-2062-4209-b989-ca470e0ecfc8",
+                },
+                {
+                  label: "Odyssey ↗",
+                  href: "https://experience.odyssey.ml/Pp9gMdA4N4",
+                },
+                {
+                  label: "Moonlake ↗",
+                  href: "https://app.moonlakeai.com/share/9UuBVmXLs-df0EXu8Fx1Eg",
+                },
               ],
             },
           ],
@@ -541,18 +562,25 @@ export const article: Article = {
           title: "Prompt #2: Coastal cliffside at dusk during a storm",
           blocks: [
             {
-              type: "paragraph",
-              text: "A coastal cliffside at dusk during a storm. Waves crash against the rocks below, sea spray rises, and tall grass bends in the wind. A narrow dirt path runs along the edge.",
-            },
-            {
-              type: "paragraph",
-              text: "Rationale: Targets the dynamic content weakness of 3D models — water, wind, grass movement. Tests whether each platform can handle multiple simultaneous dynamic elements or freezes them into a static scene.",
-            },
-            {
-              type: "list",
-              items: [
-                "Marble: https://marble.worldlabs.ai/world/d91117e9-fae9-4dc3-b712-49763db64b3b",
-                "Project Genie: https://labs.google/fx/projectgenie/tools/projectgenie/3e4ce51d-1753-48d9-911e-6b1cff840b27",
+              type: "experiment-card",
+              number: "Prompt 02",
+              prompt:
+                "A coastal cliffside at dusk during a storm. Waves crash against the rocks below, sea spray rises, and tall grass bends in the wind. A narrow dirt path runs along the edge.",
+              rationale:
+                "Targets the dynamic content weakness of 3D models — water, wind, grass movement. Tests whether each platform can handle multiple simultaneous dynamic elements or freezes them into a static scene.",
+              links: [
+                {
+                  label: "Marble ↗",
+                  href: "https://marble.worldlabs.ai/world/d91117e9-fae9-4dc3-b712-49763db64b3b",
+                },
+                {
+                  label: "Project Genie ↗",
+                  href: "https://labs.google/fx/projectgenie/tools/projectgenie/3e4ce51d-1753-48d9-911e-6b1cff840b27",
+                },
+                {
+                  label: "Odyssey ↗",
+                  href: "https://experience.odyssey.ml/iDwX4nIbhL",
+                },
               ],
             },
           ],
@@ -562,18 +590,25 @@ export const article: Article = {
           title: "Prompt #3: Cluttered workshop",
           blocks: [
             {
-              type: "paragraph",
-              text: "A cluttered workshop with tools hanging on pegboards, a half-assembled motorcycle on a workbench, oil stains on the concrete floor, and a single bare bulb overhead.",
-            },
-            {
-              type: "paragraph",
-              text: "Rationale: Tests object diversity, spatial layout coherence, and fine-grained detail rendering. Also a good stress test for navigability — can you move around the motorcycle without geometry breaking down?",
-            },
-            {
-              type: "list",
-              items: [
-                "Marble: (link in source document)",
-                "Project Genie: https://labs.google/fx/projectgenie/tools/projectgenie/5abdfb77-3f38-4412-9f3f-6d80ab0f1402",
+              type: "experiment-card",
+              number: "Prompt 03",
+              prompt:
+                "A cluttered workshop with tools hanging on pegboards, a half-assembled motorcycle on a workbench, oil stains on the concrete floor, and a single bare bulb overhead.",
+              rationale:
+                "Tests object diversity, spatial layout coherence, and fine-grained detail rendering. Also a good stress test for navigability — can you move around the motorcycle without geometry breaking down?",
+              links: [
+                {
+                  label: "Marble ↗",
+                  href: "https://marble.worldlabs.ai/world/ed991585-8c8d-4443-bcdf-4f0d1b2cee49",
+                },
+                {
+                  label: "Project Genie ↗",
+                  href: "https://labs.google/fx/projectgenie/tools/projectgenie/5abdfb77-3f38-4412-9f3f-6d80ab0f1402",
+                },
+                {
+                  label: "Odyssey ↗",
+                  href: "https://experience.odyssey.ml/RpF3EClouN",
+                },
               ],
             },
           ],
