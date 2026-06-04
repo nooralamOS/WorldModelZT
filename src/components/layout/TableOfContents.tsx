@@ -1,6 +1,15 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+  type RefObject,
+} from "react";
 import type { TocItem } from "@/content/types";
 import { useScrollSpy } from "@/hooks/useScrollSpy";
 import { cn } from "@/lib/cn";
@@ -60,6 +69,111 @@ function getActiveSectionId(activeId: string, groups: TocSectionGroup[]): string
   return groups[0]?.section.id ?? "";
 }
 
+function TocAnimatedSubList({
+  isOpen,
+  children,
+}: {
+  isOpen: boolean;
+  children: ReactNode;
+}) {
+  return (
+    <div
+      className={cn("toc-subList-wrap", isOpen && "is-open")}
+      role="group"
+      aria-hidden={!isOpen}
+    >
+      <div className="toc-subList-inner">
+        <div className="toc-subList">{children}</div>
+      </div>
+    </div>
+  );
+}
+
+type TocIndicatorStyle = {
+  top: number;
+  height: number;
+  visible: boolean;
+};
+
+function useTocIndicator(
+  navRef: RefObject<HTMLElement | null>,
+  activeId: string,
+  openSectionId: string,
+  groupCount: number,
+) {
+  const [indicator, setIndicator] = useState<TocIndicatorStyle>({
+    top: 0,
+    height: 0,
+    visible: false,
+  });
+
+  const updateIndicator = useCallback(() => {
+    const nav = navRef.current;
+    if (!nav) return;
+
+    const active = nav.querySelector<HTMLElement>(".toc-link.is-active");
+    if (!active) {
+      setIndicator((prev) =>
+        prev.visible ? { ...prev, visible: false } : prev,
+      );
+      return;
+    }
+
+    const navRect = nav.getBoundingClientRect();
+    const linkRect = active.getBoundingClientRect();
+    setIndicator({
+      top: linkRect.top - navRect.top + nav.scrollTop,
+      height: linkRect.height,
+      visible: true,
+    });
+  }, [navRef]);
+
+  useLayoutEffect(() => {
+    updateIndicator();
+  }, [updateIndicator, activeId, openSectionId, groupCount]);
+
+  useEffect(() => {
+    const nav = navRef.current;
+    if (!nav) return;
+
+    const ro = new ResizeObserver(updateIndicator);
+    ro.observe(nav);
+    nav.querySelectorAll(".toc-link, .toc-subList-wrap").forEach((el) =>
+      ro.observe(el),
+    );
+
+    const onTransitionEnd = (e: TransitionEvent) => {
+      if (
+        e.propertyName === "grid-template-rows" ||
+        e.propertyName === "opacity"
+      ) {
+        updateIndicator();
+      }
+    };
+
+    nav.querySelectorAll(".toc-subList-wrap, .toc-subList-inner").forEach(
+      (el) => el.addEventListener("transitionend", onTransitionEnd),
+    );
+
+    const sidebar = nav.closest(".toc-sidebar");
+    sidebar?.addEventListener("scroll", updateIndicator, { passive: true });
+    window.addEventListener("resize", updateIndicator, { passive: true });
+
+    return () => {
+      ro.disconnect();
+      nav
+        .querySelectorAll(".toc-subList-wrap, .toc-subList-inner")
+        .forEach((el) =>
+          el.removeEventListener("transitionend", onTransitionEnd),
+        );
+      sidebar?.removeEventListener("scroll", updateIndicator);
+      window.removeEventListener("resize", updateIndicator);
+    };
+  }, [navRef, updateIndicator, openSectionId, groupCount]);
+
+  return indicator;
+}
+
 export function TableOfContents({ items }: TableOfContentsProps) {
   const ids = useMemo(() => items.map((item) => item.id), [items]);
   const activeId = useScrollSpy(ids);
@@ -73,6 +187,14 @@ export function TableOfContents({ items }: TableOfContentsProps) {
   const [openSectionId, setOpenSectionId] = useState<string>(() => {
     return groups[0]?.section.id ?? "";
   });
+
+  const navRef = useRef<HTMLElement>(null);
+  const indicator = useTocIndicator(
+    navRef,
+    activeId,
+    openSectionId,
+    groups.length,
+  );
 
   useEffect(() => {
     if (!activeSectionId) return;
@@ -156,28 +278,28 @@ export function TableOfContents({ items }: TableOfContentsProps) {
                       )}
                     </div>
 
-                    {isOpen && group.subheadings.length > 0 && (
-                      <ul className="flex flex-col gap-0.5 pl-4">
+                    {group.subheadings.length > 0 && (
+                      <TocAnimatedSubList isOpen={isOpen}>
                         {group.subheadings.map((sub) => (
-                          <li key={sub.id}>
-                            <a
-                              href={`#${sub.id}`}
-                              onClick={() => setMobileOpen(false)}
-                              aria-current={
-                                activeId === sub.id ? "true" : undefined
-                              }
-                              className={cn(
-                                "block rounded-sm py-1 text-[0.8125rem] leading-snug transition-colors",
-                                activeId === sub.id
-                                  ? "text-accent"
-                                  : "text-muted hover:text-ink",
-                              )}
-                            >
-                              {sub.title}
-                            </a>
-                          </li>
+                          <a
+                            key={sub.id}
+                            href={`#${sub.id}`}
+                            onClick={() => setMobileOpen(false)}
+                            tabIndex={isOpen ? undefined : -1}
+                            aria-current={
+                              activeId === sub.id ? "true" : undefined
+                            }
+                            className={cn(
+                              "block rounded-sm py-1 pl-4 text-[0.8125rem] leading-snug transition-colors",
+                              activeId === sub.id
+                                ? "font-medium text-ink"
+                                : "text-muted hover:text-ink",
+                            )}
+                          >
+                            {sub.title}
+                          </a>
                         ))}
-                      </ul>
+                      </TocAnimatedSubList>
                     )}
                   </li>
                 );
@@ -189,11 +311,20 @@ export function TableOfContents({ items }: TableOfContentsProps) {
 
       <aside className="toc-sidebar" aria-label="Table of contents">
         <div className="toc-heading">Contents</div>
-        <nav className="toc-nav">
+        <nav ref={navRef} className="toc-nav">
+          <span
+            className={cn("toc-indicator", indicator.visible && "is-visible")}
+            style={{
+              transform: `translateY(${indicator.top}px)`,
+              height: indicator.height,
+            }}
+            aria-hidden="true"
+          />
           {groups.map((group, index) => {
             const needsGap = index !== 0;
             const isOpen = openSectionId === group.section.id;
-            const isActiveSection = activeSectionId === group.section.id;
+            const isInSection = activeSectionId === group.section.id;
+            const isSectionExact = activeId === group.section.id;
             const hasSubs = group.subheadings.length > 0;
 
             return (
@@ -205,7 +336,8 @@ export function TableOfContents({ items }: TableOfContentsProps) {
                     href={`#${group.section.id}`}
                     className={cn(
                       "toc-link",
-                      isActiveSection && "is-active",
+                      isInSection && "is-section-current",
+                      isSectionExact && "is-active",
                     )}
                   >
                     {group.section.sectionNumber != null && (
@@ -237,21 +369,26 @@ export function TableOfContents({ items }: TableOfContentsProps) {
                   )}
                 </div>
 
-                {isOpen && hasSubs && (
-                  <div className="toc-subList" role="group">
+                {hasSubs && (
+                  <TocAnimatedSubList isOpen={isOpen}>
                     {group.subheadings.map((sub) => {
-                      const isActive = activeId === sub.id;
+                      const isSubActive = activeId === sub.id;
                       return (
                         <a
                           key={sub.id}
                           href={`#${sub.id}`}
-                          className={cn("toc-link", "toc-sub", isActive && "is-active")}
+                          tabIndex={isOpen ? undefined : -1}
+                          className={cn(
+                            "toc-link",
+                            "toc-sub",
+                            isSubActive && "is-active",
+                          )}
                         >
                           {sub.title}
                         </a>
                       );
                     })}
-                  </div>
+                  </TocAnimatedSubList>
                 )}
               </div>
             );
