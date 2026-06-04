@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { ContentBlock, ExperimentLink } from "@/content/types";
 import { ExhibitFigure } from "@/components/article/ExhibitFigure";
 import { BodyText } from "@/components/typography/Prose";
@@ -192,16 +192,26 @@ function ExperimentCard({
           className="relative overflow-hidden"
           style={{ resize: "both", minHeight: "320px", height: "550px", minWidth: "100%" }}
         >
-          {embeddableLinks.map((link) => (
-            <iframe
-              key={link.href}
-              src={link.href}
-              className="absolute inset-0 h-full w-full border-0 bg-surface-elevated"
-              style={{ display: activeHref === link.href ? "block" : "none" }}
-              sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-pointer-lock"
-              title={link.label}
-            />
-          ))}
+          {embeddableLinks.map((link) =>
+            link.glb ? (
+              <div
+                key={link.href}
+                className="absolute inset-0"
+                style={{ display: activeHref === link.href ? "block" : "none" }}
+              >
+                <GLBViewer src={link.glb} />
+              </div>
+            ) : (
+              <iframe
+                key={link.href}
+                src={link.href}
+                className="absolute inset-0 h-full w-full border-0 bg-surface-elevated"
+                style={{ display: activeHref === link.href ? "block" : "none" }}
+                sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-pointer-lock"
+                title={link.label}
+              />
+            )
+          )}
         </div>
       </div>
 
@@ -237,6 +247,101 @@ function ExperimentCard({
       </div>
     </div>
   );
+}
+
+function GLBViewer({ src }: { src: string }) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    let alive = true;
+    let rafId: number;
+
+    void (async () => {
+      const [THREE, { GLTFLoader }, { OrbitControls }] = await Promise.all([
+        import("three"),
+        import("three/addons/loaders/GLTFLoader.js"),
+        import("three/addons/controls/OrbitControls.js"),
+      ]);
+      if (!alive) return;
+
+      const w = canvas.clientWidth;
+      const h = canvas.clientHeight;
+
+      const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+      renderer.setSize(w, h, false);
+      renderer.outputColorSpace = THREE.SRGBColorSpace;
+      renderer.toneMapping = THREE.ACESFilmicToneMapping;
+      renderer.toneMappingExposure = 1.2;
+      renderer.shadowMap.enabled = true;
+
+      const scene = new THREE.Scene();
+      scene.background = new THREE.Color(0x111111);
+
+      const camera = new THREE.PerspectiveCamera(45, w / h, 0.01, 1000);
+      camera.position.set(0, 1.5, 4);
+
+      const controls = new OrbitControls(camera, canvas);
+      controls.enableDamping = true;
+      controls.dampingFactor = 0.05;
+      controls.minDistance = 0.5;
+      controls.maxDistance = 50;
+
+      scene.add(new THREE.AmbientLight(0xffffff, 0.6));
+      const sun = new THREE.DirectionalLight(0xfff4e6, 2.0);
+      sun.position.set(5, 8, 5);
+      sun.castShadow = true;
+      scene.add(sun);
+      scene.add(new THREE.HemisphereLight(0x8ec8ff, 0x2a1a0a, 0.4));
+
+      new GLTFLoader().load(src, (gltf) => {
+        if (!alive) return;
+        const box = new THREE.Box3().setFromObject(gltf.scene);
+        const center = box.getCenter(new THREE.Vector3());
+        const size = box.getSize(new THREE.Vector3());
+        const maxDim = Math.max(size.x, size.y, size.z);
+        const scale = 3 / maxDim;
+        gltf.scene.scale.setScalar(scale);
+        gltf.scene.position.sub(center.multiplyScalar(scale));
+        scene.add(gltf.scene);
+
+        camera.position.set(0, size.y * scale * 0.5, maxDim * scale * 1.8);
+        controls.target.set(0, 0, 0);
+        controls.update();
+      });
+
+      const ro = new ResizeObserver(() => {
+        const cw = canvas.clientWidth;
+        const ch = canvas.clientHeight;
+        renderer.setSize(cw, ch, false);
+        camera.aspect = cw / ch;
+        camera.updateProjectionMatrix();
+      });
+      ro.observe(canvas);
+
+      (function loop() {
+        if (!alive) return;
+        rafId = requestAnimationFrame(loop);
+        controls.update();
+        renderer.render(scene, camera);
+      })();
+
+      return () => {
+        ro.disconnect();
+        renderer.dispose();
+      };
+    })();
+
+    return () => {
+      alive = false;
+      cancelAnimationFrame(rafId);
+    };
+  }, [src]);
+
+  return <canvas ref={canvasRef} className="h-full w-full" />;
 }
 
 function ListItemContent({ text }: { text: string }) {

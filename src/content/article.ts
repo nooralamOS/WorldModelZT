@@ -552,6 +552,7 @@ export const article: Article = {
                 {
                   label: "Moonlake ↗",
                   href: "https://app.moonlakeai.com/share/9UuBVmXLs-df0EXu8Fx1Eg",
+                  glb: "/scene-1.glb",
                 },
               ],
             },

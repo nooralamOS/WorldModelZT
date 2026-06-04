@@ -1,6 +1,7 @@
 export type ExperimentLink = {
   label: string;
   href: string;
+  glb?: string;
   disabled?: boolean;
 };
 
