@@ -202,13 +202,11 @@ function ExperimentCard({
                 <GLBViewer src={link.glb} />
               </div>
             ) : (
-              <iframe
+              <EmbeddedFrame
                 key={link.href}
-                src={link.href}
-                className="absolute inset-0 h-full w-full border-0 bg-surface-elevated"
-                style={{ display: activeHref === link.href ? "block" : "none" }}
-                sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-pointer-lock"
+                src={link.href!}
                 title={link.label}
+                visible={activeHref === link.href}
               />
             )
           )}
@@ -245,6 +243,61 @@ function ExperimentCard({
           )
         )}
       </div>
+    </div>
+  );
+}
+
+function EmbeddedFrame({
+  src,
+  title,
+  visible,
+}: {
+  src: string;
+  title: string;
+  visible: boolean;
+}) {
+  const [blocked, setBlocked] = useState(false);
+  const ref = useRef<HTMLIFrameElement>(null);
+
+  function handleLoad() {
+    try {
+      const href = ref.current?.contentWindow?.location.href;
+      // about:blank means the browser silently blocked the frame
+      if (!href || href === "about:blank") setBlocked(true);
+    } catch {
+      // SecurityError = cross-origin content loaded successfully
+    }
+  }
+
+  return (
+    <div
+      className="absolute inset-0"
+      style={{ display: visible ? "block" : "none" }}
+    >
+      {blocked ? (
+        <div className="flex h-full w-full flex-col items-center justify-center gap-3 bg-surface-elevated">
+          <p className="font-mono text-[0.6875rem] text-muted">
+            This site blocked embedding
+          </p>
+          <a
+            href={src}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="font-mono text-[0.6875rem] text-accent underline underline-offset-2 transition-colors hover:text-ink"
+          >
+            open in new tab ↗
+          </a>
+        </div>
+      ) : (
+        <iframe
+          ref={ref}
+          src={src}
+          title={title}
+          className="h-full w-full border-0 bg-surface-elevated"
+          sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-pointer-lock"
+          onLoad={handleLoad}
+        />
+      )}
     </div>
   );
 }

@@ -56,6 +56,17 @@
   }
 }
 
+/* ─── SITE NAV SHELL ─── */
+.site-nav-shell {
+  will-change: transform;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .site-nav-shell {
+    will-change: auto;
+  }
+}
+
 /* ─── TOC SIDEBAR ─── */
 .toc-sidebar {
   display: none;
@@ -214,14 +225,10 @@
   color: var(--color-ink-secondary);
 }
 
-.toc-link.is-section-current {
+.toc-link.is-section-current,
+.toc-link.is-active:not(.toc-sub) {
   color: var(--color-ink);
-  font-weight: 500;
-}
-
-.toc-link.is-active {
-  color: var(--color-ink);
-  font-weight: 500;
+  font-weight: 400;
 }
 
 .toc-sub {

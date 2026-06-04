@@ -238,7 +238,7 @@ export function TableOfContents({ items }: TableOfContentsProps) {
                           activeId === group.section.id ? "true" : undefined
                         }
                         className={cn(
-                          "flex-1 rounded-sm py-1.5 text-sm font-medium leading-snug transition-colors",
+                          "flex-1 rounded-sm py-1.5 text-sm font-normal leading-snug transition-colors",
                           isSectionActive
                             ? "text-ink"
                             : "text-muted hover:text-ink",

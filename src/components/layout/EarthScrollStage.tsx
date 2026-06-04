@@ -1,6 +1,7 @@
 'use client';
 
-import { useEffect, useRef, type ReactNode } from 'react';
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 // import { DialRoot, useDialKit } from 'dialkit';
 import 'dialkit/styles.css';
 import type * as THREE from 'three';
@@ -35,8 +36,10 @@ const DRAG_SENS = 0.005;
 const MOMENTUM_FRICTION = 0.95;
 const MAX_FLING = 9.0;
 const IDLE_SPIN = 0.08;
+const INITIAL_EARTH_TILT_DEG = 12;
 const BRUSH_RADIUS = 26;
 const MASK_DECAY = 0.014;
+const READOUT_STORAGE_KEY = 'wmzt-earth-readout-v2';
 
 const VERT_PTS = /* glsl */`
   uniform float uScale;
@@ -65,7 +68,29 @@ export function EarthScrollStage({ children, nav, articlePreview }: { children: 
   const scrollCueRef      = useRef<HTMLDivElement>(null);
   const articleContentRef  = useRef<HTMLDivElement>(null);
   const articlePreviewRef  = useRef<HTMLDivElement>(null);
+  const navShellRef        = useRef<HTMLDivElement>(null);
   const posReadoutRef     = useRef<HTMLSpanElement>(null);
+  const [readoutOpen, setReadoutOpen] = useState(true);
+  const [readoutMounted, setReadoutMounted] = useState(false);
+  const setReadoutOpenPersist = useCallback((open: boolean) => {
+    setReadoutOpen(open);
+    try {
+      localStorage.setItem(READOUT_STORAGE_KEY, open ? '1' : '0');
+    } catch {
+      /* private mode, etc. */
+    }
+  }, []);
+
+  useEffect(() => {
+    setReadoutMounted(true);
+    try {
+      if (localStorage.getItem(READOUT_STORAGE_KEY) === '0') {
+        setReadoutOpen(false);
+      }
+    } catch {
+      /* ignore */
+    }
+  }, []);
 
   // Animation spec — readable inside the Three.js effect closure via ref
   const specRef = useRef(DEFAULT_SPEC);
@@ -142,6 +167,7 @@ export function EarthScrollStage({ children, nav, articlePreview }: { children: 
     const earthScroll  = new THREE.Group();
     const earthDrag    = new THREE.Group();
     const earthOrient  = new THREE.Group();
+    earthDrag.rotation.x = THREE.MathUtils.degToRad(INITIAL_EARTH_TILT_DEG);
     earthDrag.add(earthOrient);
     earthScroll.add(earthDrag);
     scene.add(earthScroll);
@@ -154,6 +180,110 @@ export function EarthScrollStage({ children, nav, articlePreview }: { children: 
 
     let scrollPastHero = false;
     let titlePlacedInArticle = false;
+
+    const getNavShell = () => navShellRef.current;
+    const desktopMq = window.matchMedia('(min-width: 1060px)');
+    const reducedMotionMq = window.matchMedia('(prefers-reduced-motion: reduce)');
+    const navSlideDuration = reducedMotionMq.matches ? 0.01 : 0.35;
+    const NAV_THRESHOLD_PAD = 12;
+    let navHidden = false;
+    let navScrollListenerEnabled = false;
+    let navThresholdScrollY = 0;
+
+    const cacheNavThresholdScrollY = () => {
+      const st = scrollTimeline?.scrollTrigger;
+      const { tocFade } = specRef.current.phases;
+      if (!st) return;
+      navThresholdScrollY = st.start + (st.end - st.start) * tocFade.start;
+    };
+
+    const isPastNavThreshold = () => {
+      const st = scrollTimeline?.scrollTrigger;
+      const { tocFade } = specRef.current.phases;
+      if (st?.isActive) {
+        return st.progress >= tocFade.start;
+      }
+      const y = window.scrollY;
+      if (navThresholdScrollY > 0) {
+        if (navHidden) return y > navThresholdScrollY - NAV_THRESHOLD_PAD;
+        return y >= navThresholdScrollY + NAV_THRESHOLD_PAD;
+      }
+      const intro = document.getElementById('intro');
+      if (!intro) return scrollPastHero;
+      const rfs = parseFloat(getComputedStyle(document.documentElement).fontSize);
+      const line = 6 * rfs;
+      const top = intro.getBoundingClientRect().top;
+      if (navHidden) return top < line + NAV_THRESHOLD_PAD;
+      return top <= line - NAV_THRESHOLD_PAD;
+    };
+
+    const slideNavOut = () => {
+      const shell = getNavShell();
+      if (!shell || !desktopMq.matches || navHidden) return;
+      navHidden = true;
+      gsap.to(shell, {
+        yPercent: -100,
+        duration: navSlideDuration,
+        ease: 'power2.in',
+        overwrite: true,
+      });
+    };
+
+    const slideNavIn = () => {
+      const shell = getNavShell();
+      if (!shell || !desktopMq.matches || !navHidden) return;
+      navHidden = false;
+      gsap.to(shell, {
+        yPercent: 0,
+        duration: navSlideDuration,
+        ease: 'power2.out',
+        overwrite: true,
+      });
+    };
+
+    const updateNavVisibility = () => {
+      if (!getNavShell() || !desktopMq.matches) return;
+      if (isPastNavThreshold()) slideNavOut();
+      else slideNavIn();
+    };
+
+    const onNavThresholdScroll = () => updateNavVisibility();
+
+    const enableNavScrollListener = () => {
+      if (navScrollListenerEnabled) return;
+      navScrollListenerEnabled = true;
+      window.addEventListener('scroll', onNavThresholdScroll, { passive: true });
+    };
+
+    const disableNavScrollListener = () => {
+      if (!navScrollListenerEnabled) return;
+      navScrollListenerEnabled = false;
+      window.removeEventListener('scroll', onNavThresholdScroll);
+      const shell = getNavShell();
+      if (shell) gsap.killTweensOf(shell);
+    };
+
+    const onDesktopMqChange = () => {
+      const shell = getNavShell();
+      if (!shell) return;
+      if (!desktopMq.matches) {
+        disableNavScrollListener();
+        navHidden = false;
+        gsap.set(shell, { yPercent: 0 });
+        return;
+      }
+      enableNavScrollListener();
+      updateNavVisibility();
+    };
+
+    const onScrollTriggerRefresh = () => {
+      cacheNavThresholdScrollY();
+      updateNavVisibility();
+    };
+
+    desktopMq.addEventListener('change', onDesktopMqChange);
+    if (desktopMq.matches) enableNavScrollListener();
+    ScrollTrigger.addEventListener('refresh', onScrollTriggerRefresh);
 
     const ARTICLE_TITLE_CLASSES = [
       'font-display', 'font-semibold', 'leading-[1.05]', 'tracking-[-0.03em]', 'text-ink',
@@ -187,6 +317,12 @@ export function EarthScrollStage({ children, nav, articlePreview }: { children: 
       scrollPastHero = active;
       canvas.style.opacity = active ? '0' : '1';
       // articleContent opacity is owned by the scrubbed timeline (fades in at ~p=0.76)
+
+      const shell = getNavShell();
+      if (shell && desktopMq.matches) {
+        gsap.killTweensOf(shell);
+        updateNavVisibility();
+      }
 
       if (active && !titlePlacedInArticle) {
         const articleTitle = document.getElementById('article-title') as HTMLElement | null;
@@ -401,6 +537,11 @@ export function EarthScrollStage({ children, nav, articlePreview }: { children: 
       if (articlePreviewEl) gsap.set(articlePreviewEl, { clearProps: 'all' });
       gsap.set(document.body,  { backgroundColor: '#0127ff' });
       if (navEl) gsap.set(navEl, { backgroundColor: 'rgba(1,39,255,0.9)' });
+      const shell = getNavShell();
+      if (shell && desktopMq.matches) {
+        gsap.set(shell, { yPercent: 0 });
+        navHidden = false;
+      }
 
       scrollPastHero = false;
       canvas.style.opacity = '1';
@@ -457,6 +598,9 @@ export function EarthScrollStage({ children, nav, articlePreview }: { children: 
           pin:                 heroInner,
           anticipatePin:       1,
           invalidateOnRefresh: true,
+          onUpdate: () => {
+            updateNavVisibility();
+          },
           onLeave: () => {
             articleContent.classList.add('is-readable');
             setArticleHandoff(true);
@@ -537,10 +681,19 @@ export function EarthScrollStage({ children, nav, articlePreview }: { children: 
         { autoAlpha: 1, y: 0, duration: 0.24, ease: 'power2.out' },
         0.73
       );
+
+      ScrollTrigger.refresh();
+      cacheNavThresholdScrollY();
+      updateNavVisibility();
     }
 
     rebuildStoryRef.current = buildScrollStory;
     buildScrollStory();
+    requestAnimationFrame(() => {
+      ScrollTrigger.refresh();
+      cacheNavThresholdScrollY();
+      updateNavVisibility();
+    });
 
     // ── Raycast, paint & drag ──────────────────────────────────
     const raycaster = new THREE.Raycaster();
@@ -664,8 +817,8 @@ export function EarthScrollStage({ children, nav, articlePreview }: { children: 
       // Subtract heroInner's viewport offset for scroll-invariance
       const heroTop  = heroInner.getBoundingClientRect().top;
       const aspect   = window.innerWidth / window.innerHeight;
-      const oCx = oRect.left + oRect.width  / 2 - 3;   // nudge left
-      const oCy = (oRect.top - heroTop) - h1Y + oRect.height / 2 + 10; // nudge down
+      const oCx = oRect.left + oRect.width  / 2 - 1;   // nudge left
+      const oCy = (oRect.top - heroTop) - h1Y + oRect.height / 2 + 8; // nudge down
       return {
         x:     ((oCx / window.innerWidth)  * 2 - 1) * halfH * aspect,
         y:     (-(oCy / window.innerHeight) * 2 + 1) * halfH,
@@ -729,8 +882,10 @@ export function EarthScrollStage({ children, nav, articlePreview }: { children: 
         const px = earthScroll.position.x;
         const py = earthScroll.position.y;
         const sc = earthScroll.scale.x / initialScale;
+        const tiltX = THREE.MathUtils.radToDeg(earthDrag.rotation.x);
+        const tiltY = THREE.MathUtils.radToDeg(earthDrag.rotation.y);
         posReadoutRef.current.textContent =
-          `at ${progress.toFixed(2)}  ·  x ${px.toFixed(2)}  y ${py.toFixed(2)}  ·  scale ${sc.toFixed(2)}`;
+          `at ${progress.toFixed(2)}  ·  x ${px.toFixed(2)}  y ${py.toFixed(2)}  ·  scale ${sc.toFixed(2)}  ·  tilt ${tiltX.toFixed(1)}° ${tiltY.toFixed(1)}°`;
       }
 
       pointsMat.uniforms.uScale.value = earthScroll.scale.x;
@@ -748,7 +903,6 @@ export function EarthScrollStage({ children, nav, articlePreview }: { children: 
         camera.updateProjectionMatrix();
         renderer.setSize(window.innerWidth, window.innerHeight);
         buildScrollStory(true); // remeasure — hero is back in viewport after resize
-        ScrollTrigger.refresh();
       }, 150);
     }
     window.addEventListener('resize', onResize);
@@ -766,6 +920,9 @@ export function EarthScrollStage({ children, nav, articlePreview }: { children: 
       window.removeEventListener('pointercancel', endDrag as EventListener);
       window.removeEventListener('pointerleave',  onPointerLeave);
       window.removeEventListener('resize',        onResize);
+      disableNavScrollListener();
+      ScrollTrigger.removeEventListener('refresh', onScrollTriggerRefresh);
+      desktopMq.removeEventListener('change', onDesktopMqChange);
       renderer.dispose();
       document.body.classList.remove('is-dragging-earth', 'can-grab-earth');
     };
@@ -780,32 +937,76 @@ export function EarthScrollStage({ children, nav, articlePreview }: { children: 
   return (
     <>
       {nav && (
-        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, zIndex: 50 }}>
+        <div
+          ref={navShellRef}
+          className="site-nav-shell"
+          style={{ position: 'fixed', top: 0, left: 0, right: 0, zIndex: 50 }}
+        >
           {nav}
         </div>
       )}
 
-      {/* Position readout — dev tool */}
-      <div style={{
-        position: 'fixed', top: 12, left: '50%', transform: 'translateX(-50%)',
-        zIndex: 200, display: 'flex', alignItems: 'center', gap: 8,
-        background: 'rgba(0,0,0,0.72)', borderRadius: 8, padding: '5px 10px',
-        backdropFilter: 'blur(6px)', border: '1px solid rgba(255,255,255,0.12)',
-        fontFamily: 'monospace', fontSize: 11, color: '#fff', pointerEvents: 'auto',
-        userSelect: 'none',
-      }}>
-        <span ref={posReadoutRef} />
-        <button
-          onClick={() => navigator.clipboard.writeText(posReadoutRef.current?.textContent ?? '')}
-          style={{
-            background: 'rgba(255,255,255,0.15)', border: 'none', color: '#fff',
-            cursor: 'pointer', padding: '2px 8px', borderRadius: 4,
-            fontSize: 11, fontFamily: 'monospace',
-          }}
-        >
-          copy
-        </button>
-      </div>
+      {readoutMounted && createPortal(
+        readoutOpen ? (
+          <div
+            id="earth-readout"
+            style={{
+              position: 'fixed', top: 12, left: '50%', transform: 'translateX(-50%)',
+              zIndex: 99999, display: 'flex', alignItems: 'center', gap: 8,
+              background: 'rgba(0,0,0,0.85)', borderRadius: 8, padding: '5px 10px',
+              backdropFilter: 'blur(6px)', border: '1px solid rgba(255,255,255,0.2)',
+              fontFamily: 'monospace', fontSize: 11, color: '#fff', pointerEvents: 'auto',
+              userSelect: 'none', minWidth: 120,
+            }}
+          >
+            <span ref={posReadoutRef}>…</span>
+            <button
+              type="button"
+              onClick={() => navigator.clipboard.writeText(posReadoutRef.current?.textContent ?? '')}
+              style={{
+                background: 'rgba(255,255,255,0.15)', border: 'none', color: '#fff',
+                cursor: 'pointer', padding: '2px 8px', borderRadius: 4,
+                fontSize: 11, fontFamily: 'monospace',
+              }}
+            >
+              copy
+            </button>
+            <button
+              type="button"
+              aria-label="Hide earth readout"
+              title="Hide readout"
+              onClick={() => setReadoutOpenPersist(false)}
+              style={{
+                background: 'transparent', border: 'none', color: 'rgba(255,255,255,0.55)',
+                cursor: 'pointer', padding: '0 4px', lineHeight: 1, fontSize: 16,
+              }}
+            >
+              ×
+            </button>
+          </div>
+        ) : (
+          <button
+            type="button"
+            id="earth-readout-toggle"
+            aria-label="Show earth readout"
+            title="Earth readout"
+            onClick={() => setReadoutOpenPersist(true)}
+            style={{
+              position: 'fixed', bottom: 20, right: 20, zIndex: 99999,
+              width: 36, height: 36, borderRadius: '50%',
+              background: '#000', color: '#fff',
+              border: '1px solid rgba(255,255,255,0.2)',
+              boxShadow: '0 4px 14px rgba(0,0,0,0.45)',
+              cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
+              fontFamily: 'monospace', fontSize: 13, fontWeight: 600, letterSpacing: '-0.04em',
+              pointerEvents: 'auto', userSelect: 'none',
+            }}
+          >
+            E
+          </button>
+        ),
+        document.body,
+      )}
 
       <canvas
         ref={canvasRef}
@@ -815,12 +1016,12 @@ export function EarthScrollStage({ children, nav, articlePreview }: { children: 
           width:         '100%',
           height:        '100%',
           pointerEvents: 'none',
-          zIndex:        1,
+          zIndex:        2,
           touchAction:   'pan-y',
         }}
       />
 
-      <section id="scroll-stage" style={{ position: 'relative', zIndex: 2 }}>
+      <section id="scroll-stage" style={{ position: 'relative' }}>
         {/* Hero — pinned during scroll story. height:0 so the GSAP spacer alone
             offsets articleContent; at p=1.0 the article arrives at viewport top
             with no jump. heroVisual fills the viewport visually via absolute. */}
@@ -847,6 +1048,7 @@ export function EarthScrollStage({ children, nav, articlePreview }: { children: 
               alignItems:     'center',
               justifyContent: 'center',
               pointerEvents:  'none',
+              zIndex:         1,
             }}
           >
             <div
