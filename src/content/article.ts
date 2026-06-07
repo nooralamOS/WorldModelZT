@@ -575,6 +575,8 @@ export const article: Article = {
                 {
                   label: "Marble ↗",
                   href: "https://marble.worldlabs.ai/world/d91117e9-fae9-4dc3-b712-49763db64b3b",
+                  embed:
+                    "https://marble.worldlabs.ai/viewer.html?splatUrl=https%3A%2F%2Fcdn.marble.worldlabs.ai%2Fd91117e9-fae9-4dc3-b712-49763db64b3b%2F6fda98d7-376d-4dfb-9783-e0b403f593ed_ceramic.spz&mobileUrl=https%3A%2F%2Fcdn.marble.worldlabs.ai%2Fd91117e9-fae9-4dc3-b712-49763db64b3b%2F2e5bfedc-c6c3-4efa-ab7b-e184d7591055_ceramic_500k.spz&marbleWorldId=d91117e9-fae9-4dc3-b712-49763db64b3b",
                 },
                 {
                   label: "Project Genie ↗",
@@ -603,6 +605,8 @@ export const article: Article = {
                 {
                   label: "Marble ↗",
                   href: "https://marble.worldlabs.ai/world/ed991585-8c8d-4443-bcdf-4f0d1b2cee49",
+                  embed:
+                    "https://marble.worldlabs.ai/viewer.html?splatUrl=https%3A%2F%2Fcdn.marble.worldlabs.ai%2Fed991585-8c8d-4443-bcdf-4f0d1b2cee49%2Fbeb3d660-83c4-45e9-9774-be802fab46a4_ceramic.spz&mobileUrl=https%3A%2F%2Fcdn.marble.worldlabs.ai%2Fed991585-8c8d-4443-bcdf-4f0d1b2cee49%2Faa079490-b5a9-4992-aefe-84c20ab9655f_ceramic_500k.spz&marbleWorldId=ed991585-8c8d-4443-bcdf-4f0d1b2cee49",
                 },
                 {
                   label: "Project Genie ↗",
