@@ -142,10 +142,11 @@ function useTocIndicator(
       ro.observe(el),
     );
 
-    const onTransitionEnd = (e: TransitionEvent) => {
+    const onTransitionEnd = (e: Event) => {
+      const te = e as TransitionEvent;
       if (
-        e.propertyName === "grid-template-rows" ||
-        e.propertyName === "opacity"
+        te.propertyName === "grid-template-rows" ||
+        te.propertyName === "opacity"
       ) {
         updateIndicator();
       }
