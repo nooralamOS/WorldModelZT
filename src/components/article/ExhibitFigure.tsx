@@ -10,13 +10,18 @@ type ExhibitFigureProps = {
   wide?: boolean;
 };
 
+function isVideoSrc(src: string): boolean {
+  return /\.(webm|mp4|mov)(\?|$)/i.test(src);
+}
+
 export function ExhibitFigure({ src, alt, caption, wide }: ExhibitFigureProps) {
   const [isOpen, setIsOpen] = useState(false);
+  const isVideo = isVideoSrc(src);
 
   const close = useCallback(() => setIsOpen(false), []);
 
   useEffect(() => {
-    if (!isOpen) return;
+    if (!isOpen || isVideo) return;
 
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") close();
@@ -29,7 +34,32 @@ export function ExhibitFigure({ src, alt, caption, wide }: ExhibitFigureProps) {
       document.body.style.overflow = "";
       window.removeEventListener("keydown", onKeyDown);
     };
-  }, [close, isOpen]);
+  }, [close, isOpen, isVideo]);
+
+  if (isVideo) {
+    return (
+      <figure
+        className={wide ? "max-w-none" : "max-w-article"}
+        data-wide={wide ? "true" : undefined}
+      >
+        <div className="overflow-hidden rounded-sm border border-line bg-white">
+          <video
+            src={src}
+            aria-label={alt}
+            className="pointer-events-none h-auto w-full"
+            autoPlay
+            loop
+            muted
+            playsInline
+            disablePictureInPicture
+          />
+        </div>
+        <figcaption className="mt-3 font-mono text-xs uppercase tracking-[0.12em] text-muted">
+          {caption}
+        </figcaption>
+      </figure>
+    );
+  }
 
   return (
     <>

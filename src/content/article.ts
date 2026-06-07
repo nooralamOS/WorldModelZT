@@ -370,7 +370,7 @@ export const article: Article = {
             },
             {
               type: "exhibit",
-              src: "/exhibits/page12_img0.png",
+              src: "/exhibits/page12_video.webm",
               alt: "Waymo world model multimodal simulation with camera, lidar, and HD maps",
               caption: "Waymo World Model — camera, 3D lidar, and HD maps",
               wide: true,
@@ -540,6 +540,8 @@ export const article: Article = {
                 {
                   label: "Marble ↗",
                   href: "https://marble.worldlabs.ai/world/6de100b3-6534-4be4-b99e-6f780f470779",
+                  embed:
+                    "https://marble.worldlabs.ai/viewer.html?splatUrl=https%3A%2F%2Fcdn.marble.worldlabs.ai%2F6de100b3-6534-4be4-b99e-6f780f470779%2Fd07a297d-b2c7-4d51-9762-608c60b5eaf7_ceramic.spz&mobileUrl=https%3A%2F%2Fcdn.marble.worldlabs.ai%2F6de100b3-6534-4be4-b99e-6f780f470779%2F745e4f1f-b4f9-4fd7-b959-b9d829e52fd4_ceramic_500k.spz&marbleWorldId=6de100b3-6534-4be4-b99e-6f780f470779",
                 },
                 {
                   label: "Project Genie ↗",

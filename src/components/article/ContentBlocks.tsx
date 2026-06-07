@@ -204,7 +204,7 @@ function ExperimentCard({
             ) : (
               <EmbeddedFrame
                 key={link.href}
-                src={link.href!}
+                src={link.embed ?? link.href!}
                 title={link.label}
                 visible={activeHref === link.href}
               />
