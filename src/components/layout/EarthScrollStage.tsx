@@ -8,7 +8,7 @@ import type * as THREE from 'three';
 
 
 const STORY = {
-  scrollDistance: '+=300%',
+  scrollDistance: '+=200%',
   scrub: true,
   earthMove: { at: 0, duration: 0.50, ease: 'power2.inOut' },
   // World-space keyframes for earth (scale = earthScroll.scale / initialScale)
@@ -1097,7 +1097,7 @@ export function EarthScrollStage({ children, nav, articlePreview }: { children: 
         <div
           ref={articleContentRef}
           id="article-content"
-          style={{ position: 'relative', zIndex: 3, visibility: 'hidden', opacity: 0 }}
+          style={{ position: 'relative', zIndex: 3, visibility: 'hidden', opacity: 0}}
         >
           {children}
         </div>
