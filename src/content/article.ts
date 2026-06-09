@@ -455,9 +455,7 @@ export const article: Article = {
       number: 2,
       lead: "Section 1 established what world models are and how they work. This section maps where they're being deployed — the earliest commercial applications taking shape and the technical approaches different players are betting on.",
       blocks: [
-        { type: "competitive-landscape", variant: "cards", entries: competitiveEntries },
-        { type: "competitive-landscape", variant: "map", label: "Option — Positioning Map", entries: competitiveEntries },
-        { type: "competitive-landscape", variant: "dot-matrix", label: "Option — Dot Matrix", entries: competitiveEntries },
+        { type: "competitive-landscape", entries: competitiveEntries },
       ],
       subsections: [
         {

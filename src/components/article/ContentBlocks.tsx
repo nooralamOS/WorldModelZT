@@ -134,7 +134,7 @@ function BlockRenderer({ block }: { block: ContentBlock }) {
       return <ExperimentCard {...block} />;
 
     case "competitive-landscape":
-      return <CompetitiveLandscapeTable entries={block.entries} variant={block.variant ?? "cards"} label={block.label} />;
+      return <CompetitiveLandscapeTable entries={block.entries} />;
 
     default:
       return null;
@@ -532,298 +532,131 @@ function GLBViewer({ src }: { src: string }) {
   return <canvas ref={canvasRef} className="h-full w-full" />;
 }
 
-const COMPETITIVE_CATEGORIES = [
-  "Generative Latent Simulation",
-  "Generative 3D Models",
-  "Generative 2D Models",
-  "JEPA",
-  "Robotics",
-] as const;
-
 const CATEGORY_COLORS: Record<string, string> = {
-  "Generative Latent Simulation": "#a78bfa",
-  "Generative 3D Models": "#60a5fa",
-  "Generative 2D Models": "#34d399",
-  "JEPA": "#fbbf24",
-  "Robotics": "#fb923c",
+  "Generative Latent Simulation": "#2979ff",
+  "Generative 3D Models": "#e040fb",
+  "Generative 2D Models": "#ff4081",
+  "JEPA": "#00e676",
+  "Robotics": "#ffab40",
 };
 
-const STATE_SPACE_COLORS: Record<string, string> = {
-  "2D": "#34d399",
-  "3D": "#60a5fa",
-  "Latent": "#a78bfa",
-  "Mixed": "#94a3b8",
-};
-
-function getStateSpaceLabel(s?: string): string | null {
-  if (!s) return null;
-  if (s.includes("2D") && s.includes("3D")) return "Mixed";
-  if (s.includes("2D")) return "2D";
-  if (s.includes("3D")) return "3D";
-  return "Latent";
+function CompanyCard({ company }: { company: CompetitiveLandscapeEntry }) {
+  return (
+    <div className="flex flex-col gap-3 rounded-sm border border-line bg-surface-elevated p-4 shadow-xl">
+      <div className="font-semibold leading-tight text-ink">{company.name}</div>
+      <div className="flex flex-col gap-1.5">
+        {company.valuation && (
+          <div className="flex flex-col gap-0.5">
+            <span className="font-mono text-[0.5625rem] uppercase tracking-[0.1em] text-muted">Valuation</span>
+            <span className="text-[0.8125rem] leading-snug text-ink-secondary">{company.valuation}</span>
+          </div>
+        )}
+        {company.gtm && (
+          <div className="flex flex-col gap-0.5">
+            <span className="font-mono text-[0.5625rem] uppercase tracking-[0.1em] text-muted">GTM</span>
+            <span className="line-clamp-3 text-[0.8125rem] leading-snug text-ink-secondary">{company.gtm}</span>
+          </div>
+        )}
+        {company.stateSpace && (
+          <div className="flex flex-col gap-0.5">
+            <span className="font-mono text-[0.5625rem] uppercase tracking-[0.1em] text-muted">State Space</span>
+            <span className="text-[0.8125rem] leading-snug text-ink-secondary">{company.stateSpace}</span>
+          </div>
+        )}
+        {company.latency && (
+          <div className="flex flex-col gap-0.5">
+            <span className="font-mono text-[0.5625rem] uppercase tracking-[0.1em] text-muted">Latency</span>
+            <span className="text-[0.8125rem] leading-snug text-ink-secondary">{company.latency}</span>
+          </div>
+        )}
+      </div>
+      {(company.hq || company.founded) && (
+        <div className="mt-auto flex flex-wrap gap-x-3 gap-y-1 border-t border-line/50 pt-3">
+          {company.hq && <span className="font-mono text-[0.625rem] text-muted">{company.hq}</span>}
+          {company.founded && <span className="font-mono text-[0.625rem] text-muted">Est. {company.founded}</span>}
+        </div>
+      )}
+    </div>
+  );
 }
 
-const DOT_ROWS: { label: string; derive: (e: CompetitiveLandscapeEntry) => boolean }[] = [
-  { label: "Real-time", derive: (e) => !!(e.latency?.match(/real.?time/i)) },
-  { label: "Gaming", derive: (e) => !!(e.gtm?.match(/gam/i)) },
-  { label: "Robotics", derive: (e) => !!(e.gtm?.match(/robot/i)) },
-  { label: "Creative / Media", derive: (e) => !!(e.gtm?.match(/creative|media/i)) },
-  { label: "Auto. Vehicles", derive: (e) => !!(e.gtm?.match(/vehicle|AV|autono/i)) },
-  { label: "Healthcare", derive: (e) => !!(e.gtm?.match(/health/i)) },
-];
+function MapWithCards({ entries }: { entries: CompetitiveLandscapeEntry[] }) {
+  const [hovered, setHovered] = useState<string | null>(null);
+  const hoveredEntry = entries.find((e) => e.name === hovered) ?? null;
 
-function PositioningMap({ entries }: { entries: CompetitiveLandscapeEntry[] }) {
   return (
-    <div className="relative w-full overflow-hidden rounded-sm border border-line bg-surface-elevated" style={{ aspectRatio: "16/9" }}>
+    <div
+      className="relative w-full rounded-sm border border-line bg-surface-elevated"
+      style={{ aspectRatio: "16/9" }}
+    >
       {/* Axis dividers */}
-      <div className="absolute left-1/2 top-0 bottom-0 w-px bg-line/40" />
-      <div className="absolute top-1/2 left-0 right-0 h-px bg-line/40" />
+      <div className="absolute inset-y-0 left-1/2 w-px bg-line/40" />
+      <div className="absolute inset-x-0 top-1/2 h-px bg-line/40" />
 
       {/* Quadrant labels */}
-      <span className="absolute left-3 top-3 font-mono text-[0.5625rem] uppercase tracking-[0.1em] text-muted/60">3D · Creative</span>
-      <span className="absolute right-3 top-3 font-mono text-[0.5625rem] uppercase tracking-[0.1em] text-muted/60 text-right">3D · Industrial</span>
-      <span className="absolute left-3 bottom-3 font-mono text-[0.5625rem] uppercase tracking-[0.1em] text-muted/60">2D · Creative</span>
-      <span className="absolute right-3 bottom-3 font-mono text-[0.5625rem] uppercase tracking-[0.1em] text-muted/60 text-right">2D · Robotics</span>
+      <span className="absolute left-3 top-3 font-mono text-[0.5625rem] uppercase tracking-[0.1em] text-muted">3D · Creative</span>
+      <span className="absolute right-3 top-3 text-right font-mono text-[0.5625rem] uppercase tracking-[0.1em] text-muted">3D · Industrial</span>
+      <span className="absolute bottom-3 left-3 font-mono text-[0.5625rem] uppercase tracking-[0.1em] text-muted">2D · Creative</span>
+      <span className="absolute bottom-3 right-3 text-right font-mono text-[0.5625rem] uppercase tracking-[0.1em] text-muted">2D · Robotics</span>
 
       {/* Axis labels */}
-      <span className="absolute bottom-[calc(50%-1.25rem)] left-3 font-mono text-[0.5rem] uppercase tracking-[0.1em] text-muted/40">← Entertainment</span>
-      <span className="absolute bottom-[calc(50%-1.25rem)] right-3 font-mono text-[0.5rem] uppercase tracking-[0.1em] text-muted/40 text-right">Robotics →</span>
-      <span className="absolute top-3 left-[calc(50%+0.5rem)] font-mono text-[0.5rem] uppercase tracking-[0.1em] text-muted/40">3D ↑</span>
-      <span className="absolute bottom-3 left-[calc(50%+0.5rem)] font-mono text-[0.5rem] uppercase tracking-[0.1em] text-muted/40">↓ 2D</span>
+      <span className="absolute left-3 top-[calc(50%+0.875rem)] font-mono text-[0.5625rem] uppercase tracking-[0.1em] text-muted">Entertainment</span>
+      <span className="absolute right-3 top-[calc(50%+0.875rem)] text-right font-mono text-[0.5625rem] uppercase tracking-[0.1em] text-muted">Robotics</span>
 
-      {/* Company dots */}
+      {/* Company dots + labels */}
       {entries.map((company) => {
         const x = company.mapX ?? 50;
         const y = 100 - (company.mapY ?? 50);
         const color = CATEGORY_COLORS[company.category] ?? "#94a3b8";
-        const labelLeft = x > 72;
         return (
           <div
             key={company.name}
-            className="absolute flex items-center gap-1.5"
+            className="absolute z-10 flex cursor-pointer flex-col items-center gap-1"
             style={{ left: `${x}%`, top: `${y}%`, transform: "translate(-50%, -50%)" }}
+            onMouseEnter={() => setHovered(company.name)}
+            onMouseLeave={() => setHovered(null)}
           >
-            <div
-              className="h-2 w-2 flex-shrink-0 rounded-full"
-              style={{ background: color, boxShadow: `0 0 6px ${color}60` }}
-            />
-            <span
-              className="whitespace-nowrap font-mono text-[0.5625rem] text-ink-secondary"
-              style={labelLeft ? { order: -1, textAlign: "right" } : undefined}
-            >
+            <div className="h-2.5 w-2.5 rounded-full" style={{ background: color }} />
+            <span className="whitespace-nowrap font-mono text-[0.5rem] uppercase tracking-[0.06em] text-white/80">
               {company.name}
             </span>
           </div>
         );
       })}
 
-      {/* Legend */}
-      <div className="absolute bottom-6 left-1/2 -translate-x-1/2 flex flex-wrap justify-center gap-x-4 gap-y-1">
+      {/* Hover card — sibling to dots, not nested inside a transform */}
+      {hoveredEntry && (
+        <div
+          className="pointer-events-none absolute z-20 w-52"
+          style={{
+            left: `${hoveredEntry.mapX ?? 50}%`,
+            top: `${100 - (hoveredEntry.mapY ?? 50)}%`,
+            transform: `translate(${(hoveredEntry.mapX ?? 50) > 60 ? "calc(-100% - 14px)" : "14px"}, ${100 - (hoveredEntry.mapY ?? 50) > 55 ? "calc(-100% + 8px)" : "-8px"})`,
+          }}
+        >
+          <CompanyCard company={hoveredEntry} />
+        </div>
+      )}
+
+    </div>
+  );
+}
+
+function CompetitiveLandscapeTable({ entries }: { entries: CompetitiveLandscapeEntry[] }) {
+  return (
+    <figure className="w-full">
+      <figcaption className="mb-4 font-mono text-xs uppercase tracking-[0.12em] text-muted">
+        Competitive Landscape
+      </figcaption>
+      <MapWithCards entries={entries} />
+      <div className="mt-4 flex flex-col gap-1.5">
         {Object.entries(CATEGORY_COLORS).map(([cat, color]) => (
-          <div key={cat} className="flex items-center gap-1">
-            <div className="h-1.5 w-1.5 rounded-full" style={{ background: color }} />
-            <span className="font-mono text-[0.5rem] uppercase tracking-[0.08em] text-muted/60">{cat}</span>
+          <div key={cat} className="flex items-center gap-2">
+            <div className="h-1.5 w-1.5 flex-shrink-0 rounded-full" style={{ background: color }} />
+            <span className="font-mono text-[0.5625rem] uppercase tracking-[0.08em] text-muted">{cat}</span>
           </div>
         ))}
       </div>
-    </div>
-  );
-}
-
-function DotMatrix({ entries }: { entries: CompetitiveLandscapeEntry[] }) {
-  const categories = COMPETITIVE_CATEGORIES.map((cat) => ({
-    name: cat,
-    companies: entries.filter((e) => e.category === cat),
-  })).filter((c) => c.companies.length > 0);
-
-  const allCompanies = categories.flatMap((c) => c.companies);
-
-  return (
-    <div className="overflow-x-auto rounded-sm border border-line">
-      <table
-        className="border-collapse text-center text-[0.8125rem]"
-        style={{ minWidth: `${140 + allCompanies.length * 52}px` }}
-      >
-        <thead>
-          {/* Category headers */}
-          <tr>
-            <th className="sticky left-0 z-20 w-36 border-b border-line bg-surface" />
-            {categories.map((cat) => (
-              <th
-                key={cat.name}
-                colSpan={cat.companies.length}
-                className="border-b border-l border-line bg-surface-elevated px-2 py-2 font-mono text-[0.5rem] font-bold uppercase tracking-[0.1em]"
-                style={{ color: CATEGORY_COLORS[cat.name] }}
-              >
-                {cat.name}
-              </th>
-            ))}
-          </tr>
-          {/* Company names — rotated */}
-          <tr>
-            <th className="sticky left-0 z-20 border-b border-line bg-surface" />
-            {allCompanies.map((company) => (
-              <th
-                key={company.name}
-                className="border-b border-l border-line bg-surface"
-                style={{ height: "7rem", width: "52px", verticalAlign: "bottom", padding: "0 0 8px" }}
-              >
-                <div
-                  style={{
-                    writingMode: "vertical-rl",
-                    transform: "rotate(180deg)",
-                    whiteSpace: "nowrap",
-                    fontSize: "0.6875rem",
-                    fontWeight: 600,
-                    color: "var(--color-ink)",
-                    lineHeight: 1,
-                  }}
-                >
-                  {company.name}
-                </div>
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {/* State space row */}
-          <tr>
-            <td className="sticky left-0 z-10 border-b border-r border-line/50 bg-surface px-3 py-2.5 text-left align-middle font-mono text-[0.6875rem] text-muted">
-              State Space
-            </td>
-            {allCompanies.map((company) => {
-              const label = getStateSpaceLabel(company.stateSpace);
-              const color = label ? (STATE_SPACE_COLORS[label] ?? "#94a3b8") : undefined;
-              return (
-                <td key={company.name} className="border-b border-l border-line/40 py-2.5 align-middle">
-                  {label ? (
-                    <div className="flex justify-center">
-                      <span
-                        className="rounded-full px-1.5 py-0.5 font-mono text-[0.5rem] font-bold uppercase tracking-[0.08em]"
-                        style={{ background: `${color}20`, color }}
-                      >
-                        {label}
-                      </span>
-                    </div>
-                  ) : (
-                    <span className="text-muted/30">—</span>
-                  )}
-                </td>
-              );
-            })}
-          </tr>
-          {/* Boolean attribute rows */}
-          {DOT_ROWS.map((row) => (
-            <tr key={row.label}>
-              <td className="sticky left-0 z-10 border-b border-r border-line/50 bg-surface px-3 py-2.5 text-left align-middle font-mono text-[0.6875rem] text-muted last:border-b-0">
-                {row.label}
-              </td>
-              {allCompanies.map((company) => {
-                const filled = row.derive(company);
-                return (
-                  <td key={company.name} className="border-b border-l border-line/40 py-2.5 align-middle last:border-b-0">
-                    <div className="flex justify-center">
-                      <div
-                        className="h-3 w-3 rounded-full"
-                        style={filled
-                          ? { background: "#60a5fa", boxShadow: "0 0 4px #60a5fa60" }
-                          : { border: "1.5px solid rgba(255,255,255,0.1)" }
-                        }
-                      />
-                    </div>
-                  </td>
-                );
-              })}
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  );
-}
-
-function CompetitiveLandscapeTable({
-  entries,
-  variant = "cards",
-  label,
-}: {
-  entries: CompetitiveLandscapeEntry[];
-  variant?: "cards" | "map" | "dot-matrix";
-  label?: string;
-}) {
-  const categories = COMPETITIVE_CATEGORIES.map((cat) => ({
-    name: cat,
-    companies: entries.filter((e) => e.category === cat),
-  })).filter((c) => c.companies.length > 0);
-
-  return (
-    <figure data-wide="true" className="w-full">
-      {label && (
-        <div className="mb-3 font-mono text-[0.625rem] font-bold uppercase tracking-[0.14em] text-muted">
-          {label}
-        </div>
-      )}
-
-      {variant === "cards" && (
-        <div className="flex flex-col gap-8">
-          {categories.map((cat) => (
-            <div key={cat.name}>
-              <div className="mb-3 font-mono text-[0.625rem] font-bold uppercase tracking-[0.14em] text-accent">
-                {cat.name}
-              </div>
-              <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
-                {cat.companies.map((company) => (
-                  <div
-                    key={company.name}
-                    className="flex flex-col gap-3 rounded-sm border border-line bg-surface-elevated p-4"
-                  >
-                    <div className="font-semibold leading-tight text-ink">{company.name}</div>
-                    <div className="flex flex-col gap-1.5">
-                      {company.valuation && (
-                        <div className="flex flex-col gap-0.5">
-                          <span className="font-mono text-[0.5625rem] uppercase tracking-[0.1em] text-muted">Valuation</span>
-                          <span className="text-[0.8125rem] leading-snug text-ink-secondary">{company.valuation}</span>
-                        </div>
-                      )}
-                      {company.gtm && (
-                        <div className="flex flex-col gap-0.5">
-                          <span className="font-mono text-[0.5625rem] uppercase tracking-[0.1em] text-muted">GTM</span>
-                          <span className="line-clamp-3 text-[0.8125rem] leading-snug text-ink-secondary">{company.gtm}</span>
-                        </div>
-                      )}
-                      {company.stateSpace && (
-                        <div className="flex flex-col gap-0.5">
-                          <span className="font-mono text-[0.5625rem] uppercase tracking-[0.1em] text-muted">State Space</span>
-                          <span className="text-[0.8125rem] leading-snug text-ink-secondary">{company.stateSpace}</span>
-                        </div>
-                      )}
-                      {company.latency && (
-                        <div className="flex flex-col gap-0.5">
-                          <span className="font-mono text-[0.5625rem] uppercase tracking-[0.1em] text-muted">Latency</span>
-                          <span className="text-[0.8125rem] leading-snug text-ink-secondary">{company.latency}</span>
-                        </div>
-                      )}
-                    </div>
-                    {(company.hq || company.founded) && (
-                      <div className="mt-auto flex flex-wrap gap-x-3 gap-y-1 border-t border-line/50 pt-3">
-                        {company.hq && <span className="font-mono text-[0.625rem] text-muted">{company.hq}</span>}
-                        {company.founded && <span className="font-mono text-[0.625rem] text-muted">Est. {company.founded}</span>}
-                      </div>
-                    )}
-                  </div>
-                ))}
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {variant === "map" && <PositioningMap entries={entries} />}
-      {variant === "dot-matrix" && <DotMatrix entries={entries} />}
-
-      <figcaption className="mt-4 font-mono text-xs uppercase tracking-[0.12em] text-muted">
-        Competitive Landscape
-      </figcaption>
     </figure>
   );
 }

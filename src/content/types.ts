@@ -37,7 +37,7 @@ export type ContentBlock =
   | { type: "exhibit"; src: string; alt: string; caption: string; wide?: boolean }
   | { type: "table"; headers: string[]; rows: string[][] }
   | { type: "experiment-card"; number: string; prompt: string; rationale: string; links: ExperimentLink[] }
-  | { type: "competitive-landscape"; entries: CompetitiveLandscapeEntry[]; variant?: "cards" | "map" | "dot-matrix"; label?: string };
+  | { type: "competitive-landscape"; entries: CompetitiveLandscapeEntry[] };
 
 export type Subsection = {
   id: string;
