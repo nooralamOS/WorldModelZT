@@ -53,7 +53,7 @@ function shortNavLabel(title: string): string {
     Introduction: "Intro",
     "What is a world model?": "Definition",
     "Who's building world models and what are they being built for?":
-      "Builders",
+      "Application & Landscape",
     "Core technical bottlenecks across different approaches": "Bottlenecks",
     "Experiments across world models": "Experiments",
   };
