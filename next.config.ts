@@ -5,7 +5,7 @@ const nextConfig: NextConfig = {
     unoptimized: true,
   },
   experimental: {
-    optimizePackageImports: ["three", "gsap"],
+    optimizePackageImports: ["three", "gsap", "@sparkjsdev/spark"],
   },
 };
 

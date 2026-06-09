@@ -9,6 +9,7 @@
     "lint": "next lint"
   },
   "dependencies": {
+    "@sparkjsdev/spark": "^2.1.0",
     "dialkit": "^1.2.0",
     "gsap": "^3.15.0",
     "motion": "^12.40.0",

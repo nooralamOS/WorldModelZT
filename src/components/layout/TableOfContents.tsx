@@ -111,16 +111,29 @@ function useTocIndicator(
     const nav = navRef.current;
     if (!nav) return;
 
-    const active = nav.querySelector<HTMLElement>(".toc-link.is-active");
-    if (!active) {
+    let target = nav.querySelector<HTMLElement>(".toc-link.is-active");
+    if (!target) {
       setIndicator((prev) =>
         prev.visible ? { ...prev, visible: false } : prev,
       );
       return;
     }
 
+    // When a section is collapsed, the active sub is hidden — anchor the
+    // indicator on the parent section row so it slides up/down with it.
+    const closedSubList = target.closest<HTMLElement>(
+      ".toc-subList-wrap:not(.is-open)",
+    );
+    if (closedSubList) {
+      const sectionRow = closedSubList.previousElementSibling;
+      if (sectionRow?.classList.contains("toc-sectionRow")) {
+        target =
+          sectionRow.querySelector<HTMLElement>(".toc-link") ?? target;
+      }
+    }
+
     const navRect = nav.getBoundingClientRect();
-    const linkRect = active.getBoundingClientRect();
+    const linkRect = target.getBoundingClientRect();
     setIndicator({
       top: linkRect.top - navRect.top + nav.scrollTop,
       height: linkRect.height,
@@ -188,19 +201,39 @@ export function TableOfContents({ items }: TableOfContentsProps) {
   const [openSectionId, setOpenSectionId] = useState<string>(() => {
     return groups[0]?.section.id ?? "";
   });
+  const [navTargetId, setNavTargetId] = useState<string | null>(null);
+
+  const effectiveActiveId = navTargetId ?? activeId;
+  const effectiveSectionId = useMemo(
+    () => getActiveSectionId(effectiveActiveId, groups),
+    [effectiveActiveId, groups],
+  );
 
   const navRef = useRef<HTMLElement>(null);
   const indicator = useTocIndicator(
     navRef,
-    activeId,
+    effectiveActiveId,
     openSectionId,
     groups.length,
   );
 
+  const handleNavClick = useCallback(
+    (id: string) => {
+      setNavTargetId(id);
+      const sectionId = getActiveSectionId(id, groups);
+      if (sectionId) setOpenSectionId(sectionId);
+    },
+    [groups],
+  );
+
   useEffect(() => {
+    if (navTargetId) {
+      if (activeId === navTargetId) setNavTargetId(null);
+      return;
+    }
     if (!activeSectionId) return;
     setOpenSectionId(activeSectionId);
-  }, [activeSectionId]);
+  }, [activeId, activeSectionId, navTargetId]);
 
   return (
     <>
@@ -227,16 +260,21 @@ export function TableOfContents({ items }: TableOfContentsProps) {
             <ul className="flex flex-col gap-1">
               {groups.map((group) => {
                 const isOpen = openSectionId === group.section.id;
-                const isSectionActive = activeSectionId === group.section.id;
+                const isSectionActive = effectiveSectionId === group.section.id;
 
                 return (
                   <li key={group.section.id} className="flex flex-col gap-0.5">
                     <div className="flex items-center justify-between gap-2">
                       <a
                         href={`#${group.section.id}`}
-                        onClick={() => setMobileOpen(false)}
+                        onClick={() => {
+                          handleNavClick(group.section.id);
+                          setMobileOpen(false);
+                        }}
                         aria-current={
-                          activeId === group.section.id ? "true" : undefined
+                          effectiveActiveId === group.section.id
+                            ? "true"
+                            : undefined
                         }
                         className={cn(
                           "flex-1 rounded-sm py-1.5 text-sm font-normal leading-snug transition-colors",
@@ -285,14 +323,17 @@ export function TableOfContents({ items }: TableOfContentsProps) {
                           <a
                             key={sub.id}
                             href={`#${sub.id}`}
-                            onClick={() => setMobileOpen(false)}
+                            onClick={() => {
+                              handleNavClick(sub.id);
+                              setMobileOpen(false);
+                            }}
                             tabIndex={isOpen ? undefined : -1}
                             aria-current={
-                              activeId === sub.id ? "true" : undefined
+                              effectiveActiveId === sub.id ? "true" : undefined
                             }
                             className={cn(
                               "block rounded-sm py-1 pl-4 text-[0.8125rem] leading-snug transition-colors",
-                              activeId === sub.id
+                              effectiveActiveId === sub.id
                                 ? "font-medium text-ink"
                                 : "text-muted hover:text-ink",
                             )}
@@ -324,8 +365,8 @@ export function TableOfContents({ items }: TableOfContentsProps) {
           {groups.map((group, index) => {
             const needsGap = index !== 0;
             const isOpen = openSectionId === group.section.id;
-            const isInSection = activeSectionId === group.section.id;
-            const isSectionExact = activeId === group.section.id;
+            const isInSection = effectiveSectionId === group.section.id;
+            const isSectionExact = effectiveActiveId === group.section.id;
             const hasSubs = group.subheadings.length > 0;
 
             return (
@@ -335,6 +376,7 @@ export function TableOfContents({ items }: TableOfContentsProps) {
                 <div className="toc-sectionRow">
                   <a
                     href={`#${group.section.id}`}
+                    onClick={() => handleNavClick(group.section.id)}
                     className={cn(
                       "toc-link",
                       isInSection && "is-section-current",
@@ -373,11 +415,12 @@ export function TableOfContents({ items }: TableOfContentsProps) {
                 {hasSubs && (
                   <TocAnimatedSubList isOpen={isOpen}>
                     {group.subheadings.map((sub) => {
-                      const isSubActive = activeId === sub.id;
+                      const isSubActive = effectiveActiveId === sub.id;
                       return (
                         <a
                           key={sub.id}
                           href={`#${sub.id}`}
+                          onClick={() => handleNavClick(sub.id)}
                           tabIndex={isOpen ? undefined : -1}
                           className={cn(
                             "toc-link",

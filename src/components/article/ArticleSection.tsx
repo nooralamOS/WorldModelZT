@@ -13,7 +13,7 @@ export function ArticleSection({ section }: ArticleSectionProps) {
       aria-labelledby={`${section.id}-title`}
       className="scroll-mt-28"
     >
-      <div className="max-w-article border-t border-line" aria-hidden="true" />
+      <div className="mt-20 max-w-article border-t border-line sm:mt-28" aria-hidden="true" />
       <div className="pt-20 sm:pt-28">
       <header className="mb-12 flex max-w-article flex-col gap-6">
         <SectionTitle id={`${section.id}-title`} number={section.number}>
