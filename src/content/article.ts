@@ -250,7 +250,7 @@ export const article: Article = {
             },
             {
               type: "exhibit",
-              src: "/exhibits/page2_img0.png",
+              src: "/exhibits/page2_img02.png",
               alt: "Timeline diagram of world model history organized in waves from early cybernetics through modern generative models",
               caption: "Exhibit: World Model History in Waves",
             },
@@ -266,7 +266,7 @@ export const article: Article = {
             },
             {
               type: "exhibit",
-              src: "/exhibits/page3_img0.png",
+              src: "/exhibits/page3_img02.png",
               alt: "Diagram defining a world model as an action-conditioned forward dynamics model",
               caption: "Exhibit: Definition of World Model",
             },

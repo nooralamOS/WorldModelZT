@@ -1,10 +1,27 @@
 @import "tailwindcss";
 
+@font-face {
+  font-family: "PP Mondwest";
+  src: url("/fonts/ppmondwest-regular.otf") format("opentype");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "PP NeueBit";
+  src: url("/fonts/ppneuebit-bold.otf") format("opentype");
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+
 @theme {
   --font-sans: "Inter", system-ui, -apple-system,
     BlinkMacSystemFont, sans-serif;
   --font-display: "Inter", system-ui, -apple-system,
     BlinkMacSystemFont, sans-serif;
+  --font-neuebit: "PP NeueBit", "Inter", system-ui, sans-serif;
 
   --color-surface: #0127ff; /* pink: FA4EDF; blue: 0127ff */
   --color-surface-elevated: #0d2ab0;
@@ -262,10 +279,17 @@ body.can-grab-earth {
 
 .earth-hero-title {
   font-size: clamp(3.5rem, 11vw, 9rem);
-  font-weight: 900;
   line-height: 0.95;
-  letter-spacing: -0.03em;
   color: #fff;
+}
+
+/* PP Mondwest ships regular-only; identical font/weight/tracking on the
+   visible title and its anchor keeps the shrink handoff metrics in sync */
+.earth-hero-title,
+#article-title {
+  font-family: "PP Mondwest", var(--font-display);
+  font-weight: 400;
+  letter-spacing: 0;
 }
 
 #o-target {

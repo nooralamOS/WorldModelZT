@@ -46,7 +46,7 @@ export function SectionTitle({ children, number, className, id }: SectionTitlePr
     <h2
       id={id}
       className={cn(
-        "scroll-mt-28 font-display text-[clamp(1.75rem,4vw,2.5rem)] font-semibold leading-[1.15] tracking-[-0.02em] text-ink",
+        "scroll-mt-28 font-neuebit text-[clamp(2.5rem,5.5vw,3.75rem)] font-bold leading-[1.1] tracking-normal text-ink",
         className,
       )}
     >
@@ -71,7 +71,7 @@ export function SubsectionTitle({ children, className, id }: SubsectionTitleProp
     <h3
       id={id}
       className={cn(
-        "scroll-mt-28 text-xl font-semibold leading-snug tracking-[-0.01em] text-ink sm:text-[1.35rem]",
+        "scroll-mt-28 font-neuebit text-[1.65rem] font-bold leading-snug tracking-normal text-ink sm:text-[1.85rem]",
         className,
       )}
     >

@@ -28,10 +28,10 @@ export function SiteNav({ items }: SiteNavProps) {
                 href={`#${item.id}`}
                 aria-current={activeId === item.id ? "true" : undefined}
                 className={cn(
-                  "block whitespace-nowrap text-[0.8125rem] leading-[1.45] transition-colors",
+                  "block whitespace-nowrap font-neuebit text-[1.05rem] font-bold leading-[1.45] transition-colors",
                   activeId === item.id
-                    ? "font-medium text-ink"
-                    : "font-normal text-muted hover:text-ink-secondary",
+                    ? "text-ink"
+                    : "text-muted hover:text-ink-secondary",
                 )}
                 style={{
                   paddingInline: "var(--nav-item-padding-x, 0.8rem)",
