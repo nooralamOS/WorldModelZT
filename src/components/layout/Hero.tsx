@@ -53,7 +53,7 @@ export function Hero({ meta }: HeroProps) {
         <span>{meta.sectionCount} sections</span>
       </div>
 
-      <div className="mt-14 max-w-article border-y border-line py-8">
+      <div className="mt-14 max-w-article divider-dashed-y py-8">
         <Epigraph quote={meta.epigraph.quote} attribution={meta.epigraph.attribution} />
       </div>
     </header>

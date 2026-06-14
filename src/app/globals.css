@@ -26,7 +26,7 @@
   --color-surface: #0127ff; /* pink: FA4EDF; blue: 0127ff */
   --color-surface-elevated: #0d2ab0;
   --color-ink: #ffffff;
-  --color-ink-secondary: #ffffff;
+  --color-ink-secondary: #dde4ff;
   --color-muted: rgba(255, 255, 255, 0.38);
   --color-line: rgba(255, 255, 255, 0.15);
   --color-line-light: rgba(255, 255, 255, 0.07);
@@ -73,6 +73,35 @@
   }
 }
 
+/* Long-dash divider lines (browser `border-dashed` can't size dashes) */
+@utility divider-dashed-t {
+  background-image: repeating-linear-gradient(
+    to right,
+    var(--color-line-strong) 0 28px,
+    transparent 28px 46px
+  );
+  background-repeat: no-repeat;
+  background-position: top left;
+  background-size: 100% 2px;
+}
+
+@utility divider-dashed-y {
+  background-image:
+    repeating-linear-gradient(
+      to right,
+      var(--color-line-strong) 0 28px,
+      transparent 28px 46px
+    ),
+    repeating-linear-gradient(
+      to right,
+      var(--color-line-strong) 0 28px,
+      transparent 28px 46px
+    );
+  background-repeat: no-repeat;
+  background-position: top left, bottom left;
+  background-size: 100% 2px, 100% 2px;
+}
+
 /* ─── SITE NAV SHELL ─── */
 .site-nav-shell {
   will-change: transform;
@@ -87,6 +116,7 @@
 /* ─── TOC SIDEBAR ─── */
 .toc-sidebar {
   display: none;
+  font-family: var(--font-neuebit);
 }
 
 @media (min-width: 1060px) {
@@ -106,12 +136,15 @@
 }
 
 .toc-heading {
-  font-size: 0.625rem;
+  font-family: var(--font-neuebit);
+  font-size: 0.8125rem;
   font-weight: 700;
   letter-spacing: 0.14em;
   text-transform: uppercase;
   color: var(--color-muted);
   margin-bottom: 1rem;
+  /* NeueBit is bold-only, so font-weight can't go heavier — stroke fakes it */
+  -webkit-text-stroke: 0.4px var(--color-muted);
 }
 
 .toc-nav {
@@ -227,12 +260,12 @@
 }
 
 .toc-link {
-  font-size: 0.8125rem;
+  font-size: 1.1875rem;
   font-weight: 400;
   color: var(--color-muted);
   text-decoration: none;
-  line-height: 1.45;
-  padding: 0.2rem 0 0.2rem 0.75rem;
+  line-height: 1.2;
+  padding: 0.1rem 0 0.1rem 0.75rem;
   border-left: 1.5px solid transparent;
   transition: color 0.15s, border-color 0.15s;
   display: block;
@@ -250,7 +283,7 @@
 
 .toc-sub {
   padding-left: 1.375rem;
-  font-size: 0.75rem;
+  font-size: 1.1625rem;
 }
 
 .toc-sub.is-active {
@@ -259,7 +292,7 @@
 }
 
 .toc-gap {
-  height: 0.625rem;
+  height: 0.3rem;
 }
 
 /* ─── EARTH SCROLL STAGE ─── */

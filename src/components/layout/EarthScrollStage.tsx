@@ -40,6 +40,10 @@ const INITIAL_EARTH_TILT_DEG = 12;
 const BRUSH_RADIUS = 26;
 const MASK_DECAY = 0.014;
 const READOUT_STORAGE_KEY = 'wmzt-earth-readout-v2';
+// Resting offset that tucks the title fully below the clip baseline before it's
+// revealed. Must clear the font's line-box overflow (line-height: 0.95) or the
+// glyph tops peek out. Used for the initial inline style AND every reset path.
+const TITLE_HIDDEN_Y = '130%';
 
 const VERT_PTS = /* glsl */`
   uniform float uScale;
@@ -287,7 +291,7 @@ export function EarthScrollStage({ children, nav, articlePreview }: { children: 
       const clipEl = document.getElementById('title-clip') as HTMLElement | null;
       if (clipEl) clipEl.style.overflow = 'hidden';
 
-      gsap.set(titleH1, { y: '110%', clearProps: 'x,scale,fontSize' });
+      gsap.set(titleH1, { y: TITLE_HIDDEN_Y, clearProps: 'x,scale,fontSize' });
       gsap.set(titleWrap, {
         y: 0, opacity: 1, textAlign: 'center',
         clearProps: 'x,scale,margin,padding,width,position,left,top,zIndex,transformOrigin,textAlign',
@@ -424,7 +428,7 @@ export function EarthScrollStage({ children, nav, articlePreview }: { children: 
       const heroInnerRect      = heroInner.getBoundingClientRect();
       const previewTop  = titleWrapFinalRect.bottom - heroInnerRect.top;
       const previewLeft = titleWrapFinalRect.left   - heroInnerRect.left;
-      gsap.set(titleH1, { y: '110%', clearProps: 'fontSize' });
+      gsap.set(titleH1, { y: TITLE_HIDDEN_Y, clearProps: 'fontSize' });
       gsap.set(titleWrap, { x: 0, y: 0, clearProps: 'scale,transformOrigin' });
 
       return { titleShrink, previewTop, previewLeft };
@@ -475,7 +479,7 @@ export function EarthScrollStage({ children, nav, articlePreview }: { children: 
       earthScroll.position.set(0, 0, 0);
       earthScroll.scale.setScalar(initialScale);
 
-      gsap.set(titleH1, { y: '110%', clearProps: 'fontSize' });
+      gsap.set(titleH1, { y: TITLE_HIDDEN_Y, clearProps: 'fontSize' });
       gsap.set(titleWrap,      { y: 0, opacity: 1 });
       gsap.set(scrollCue,      { opacity: 1 });
       gsap.set(articleContent, { opacity: 0, visibility: 'hidden' });
@@ -1020,7 +1024,7 @@ export function EarthScrollStage({ children, nav, articlePreview }: { children: 
                 <h1
                   ref={titleH1Ref}
                   className="earth-hero-title"
-                  style={{ transform: 'translateY(110%)' }}
+                  style={{ transform: `translateY(${TITLE_HIDDEN_Y})` }}
                 >
                   W<span ref={oTargetRef} id="o-target">o</span>rld Model Deep-Dive
                 </h1>

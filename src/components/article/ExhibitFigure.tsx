@@ -13,7 +13,7 @@ export function ExhibitFigure({ src, alt, caption, wide }: ExhibitFigureProps) {
 
   return (
     <figure className={wide ? "max-w-none" : "max-w-article"} data-wide={wide ? "true" : undefined}>
-      <div className="overflow-hidden rounded-sm border border-line bg-white">
+      <div className="overflow-hidden rounded-sm">
         {isVideo ? (
           <video
             src={src}

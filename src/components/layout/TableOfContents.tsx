@@ -237,12 +237,15 @@ export function TableOfContents({ items }: TableOfContentsProps) {
 
   return (
     <>
-      <div className="mb-8 min-[1060px]:hidden">
+      <div
+        className="mb-8 min-[1060px]:hidden"
+        style={{ fontFamily: "var(--font-neuebit)" }}
+      >
         <button
           type="button"
           onClick={() => setMobileOpen((open) => !open)}
           aria-expanded={mobileOpen}
-          className="flex w-full items-center justify-between rounded-sm border border-line bg-surface-elevated px-4 py-3 text-sm font-medium text-ink"
+          className="flex w-full items-center justify-between rounded-sm border border-line bg-surface-elevated px-4 py-3 text-base font-medium text-ink"
         >
           <span>Table of contents</span>
           <span
@@ -277,7 +280,7 @@ export function TableOfContents({ items }: TableOfContentsProps) {
                             : undefined
                         }
                         className={cn(
-                          "flex-1 rounded-sm py-1.5 text-sm font-normal leading-snug transition-colors",
+                          "flex-1 rounded-sm py-1.5 text-base font-normal leading-snug transition-colors",
                           isSectionActive
                             ? "text-ink"
                             : "text-muted hover:text-ink",
@@ -332,7 +335,7 @@ export function TableOfContents({ items }: TableOfContentsProps) {
                               effectiveActiveId === sub.id ? "true" : undefined
                             }
                             className={cn(
-                              "block rounded-sm py-1 pl-4 text-[0.8125rem] leading-snug transition-colors",
+                              "block rounded-sm py-1 pl-4 text-[0.9375rem] leading-snug transition-colors",
                               effectiveActiveId === sub.id
                                 ? "font-medium text-ink"
                                 : "text-muted hover:text-ink",

@@ -1,7 +1,7 @@
 export function SiteFooter() {
   return (
     <footer className="mt-32 pb-16">
-      <div className="max-w-article border-t border-line pt-12">
+      <div className="max-w-article divider-dashed-t pt-12">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
           <div>
             <p className="font-display text-lg font-semibold text-ink">

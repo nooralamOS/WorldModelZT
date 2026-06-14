@@ -15,7 +15,7 @@ export function SiteNav({ items }: SiteNavProps) {
   return (
     <nav
       aria-label="Page sections"
-      className="sticky top-0 z-40 border-b border-line/80 bg-surface/90 backdrop-blur-md"
+      className="sticky top-0 z-40 bg-surface/90 backdrop-blur-md"
     >
       <div className="mx-auto flex h-14 max-w-content items-center justify-center overflow-x-auto px-6 scrollbar-none sm:px-8 lg:px-12">
         <ul

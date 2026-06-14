@@ -39,8 +39,8 @@ export default function HomePage() {
                 <TableOfContents items={toc} />
               </div>
 
-              <section id="intro" className="scroll-mt-28 pt-8 sm:pt-10">
-                <header className="mb-10 max-w-article">
+              <section id="intro" className="scroll-mt-28 pt-2 sm:pt-3">
+                <header className="mb-4 max-w-article">
                   <SubsectionTitle id="intro-title">Introduction</SubsectionTitle>
                 </header>
                 <div className="max-w-article">

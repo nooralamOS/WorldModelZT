@@ -50,12 +50,12 @@ export function SectionTitle({ children, number, className, id }: SectionTitlePr
         className,
       )}
     >
+      {children}
       {number != null && (
-        <span className="mr-3 font-mono text-sm font-medium text-muted tabular-nums">
+        <span className="ml-3 font-mono text-sm font-medium text-muted tabular-nums">
           {String(number).padStart(2, "0")}
         </span>
       )}
-      {children}
     </h2>
   );
 }
@@ -71,7 +71,7 @@ export function SubsectionTitle({ children, className, id }: SubsectionTitleProp
     <h3
       id={id}
       className={cn(
-        "scroll-mt-28 font-neuebit text-[1.65rem] font-bold leading-snug tracking-normal text-ink sm:text-[1.85rem]",
+        "scroll-mt-28 font-neuebit text-[2rem] font-bold leading-snug tracking-normal text-ink sm:text-[2.35rem]",
         className,
       )}
     >
@@ -119,7 +119,7 @@ type EpigraphProps = {
 export function Epigraph({ quote, attribution }: EpigraphProps) {
   return (
     <figure>
-      <blockquote className="text-lg leading-[1.7] text-ink-secondary italic sm:text-[1.15rem]">
+      <blockquote className="font-neuebit text-2xl leading-[1.5] text-ink-secondary italic sm:text-3xl">
         {quote}
       </blockquote>
       <figcaption className="mt-4 text-sm text-muted">— {attribution}</figcaption>

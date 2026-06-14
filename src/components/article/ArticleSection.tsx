@@ -13,8 +13,8 @@ export function ArticleSection({ section }: ArticleSectionProps) {
       aria-labelledby={`${section.id}-title`}
       className="scroll-mt-28"
     >
-      <div className="mt-20 max-w-article border-t border-line sm:mt-28" aria-hidden="true" />
-      <div className="pt-20 sm:pt-28">
+      <div className="mt-10 h-0.5 max-w-article divider-dashed-t sm:mt-14" aria-hidden="true" />
+      <div className="pt-10 sm:pt-14">
       <header className="mb-12 flex max-w-article flex-col gap-6">
         <SectionTitle id={`${section.id}-title`} number={section.number}>
           {section.title}
@@ -28,10 +28,10 @@ export function ArticleSection({ section }: ArticleSectionProps) {
         </div>
       )}
 
-      <div className="flex flex-col gap-20 sm:gap-24">
+      <div className="flex flex-col gap-10 sm:gap-12">
         {section.subsections.map((subsection) => (
           <div key={subsection.id} id={subsection.id} className="scroll-mt-28">
-            <header className="mb-8 max-w-article">
+            <header className="mb-3 max-w-article">
               <SubsectionTitle id={`${subsection.id}-title`}>
                 {subsection.title}
               </SubsectionTitle>
