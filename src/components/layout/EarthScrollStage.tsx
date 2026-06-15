@@ -62,7 +62,7 @@ const FRAG_PTS = /* glsl */`
     gl_FragColor = vec4(1.0, 1.0, 1.0, 1.0 - mask);
   }
 `;
-export function EarthScrollStage({ children, nav, articlePreview }: { children: ReactNode; nav?: ReactNode; articlePreview?: ReactNode }) {
+export function EarthScrollStage({ children, nav, articlePreview, view }: { children: ReactNode; nav?: ReactNode; articlePreview?: ReactNode; view?: string }) {
   const canvasRef         = useRef<HTMLCanvasElement>(null);
   const heroInnerRef      = useRef<HTMLDivElement>(null);
   const heroVisualRef     = useRef<HTMLDivElement>(null);
@@ -241,7 +241,11 @@ export function EarthScrollStage({ children, nav, articlePreview }: { children: 
       });
     };
 
+    // The toggle replaced the section nav and is a persistent control —
+    // never auto-hide it on scroll. (Machinery kept for potential reuse.)
+    const NAV_AUTO_HIDE = false;
     const updateNavVisibility = () => {
+      if (!NAV_AUTO_HIDE) return;
       if (!getNavShell() || !desktopMq.matches) return;
       if (isPastNavThreshold()) slideNavOut();
       else slideNavIn();
@@ -896,6 +900,23 @@ export function EarthScrollStage({ children, nav, articlePreview }: { children: 
       teardown?.();
     };
   }, []);
+
+  // View toggle (TLDR ⇄ Full Article) swaps the children inside #article-content.
+  // After the new content commits, reset to the top and rebuild the scroll story
+  // so the title re-measures its shrink target against the new layout.
+  const viewMountedRef = useRef(false);
+  useEffect(() => {
+    if (!viewMountedRef.current) {
+      viewMountedRef.current = true;
+      return;
+    }
+    window.scrollTo({ top: 0 });
+    const id = requestAnimationFrame(() => {
+      rebuildStoryRef.current?.(true);
+      refreshScrollRef.current?.();
+    });
+    return () => cancelAnimationFrame(id);
+  }, [view]);
 
   return (
     <>

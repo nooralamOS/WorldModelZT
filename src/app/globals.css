@@ -73,6 +73,61 @@
   }
 }
 
+@utility font-mondwest {
+  font-family: "PP Mondwest", var(--font-display);
+}
+
+/* ─── VIEW TOGGLE (TLDR ⇄ Full Article) ─── */
+.view-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 1.75rem;
+  height: 4rem;
+  background: transparent;
+}
+
+.view-toggle__item {
+  position: relative;
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+  padding: 0.45rem 1rem;
+  font-family: var(--font-display);
+  font-size: 1.3rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  line-height: 1;
+  color: var(--color-muted);
+  transition: color 0.2s ease;
+}
+
+.view-toggle__item:hover {
+  color: var(--color-ink-secondary);
+}
+
+.view-toggle__item.is-active {
+  color: var(--color-ink);
+}
+
+.view-toggle__frame {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.vt-corner {
+  position: absolute;
+  width: 9px;
+  height: 9px;
+  border: 0 solid var(--color-ink);
+}
+
+.vt-corner.tl { top: 0; left: 0; border-top-width: 1.5px; border-left-width: 1.5px; }
+.vt-corner.tr { top: 0; right: 0; border-top-width: 1.5px; border-right-width: 1.5px; }
+.vt-corner.bl { bottom: 0; left: 0; border-bottom-width: 1.5px; border-left-width: 1.5px; }
+.vt-corner.br { bottom: 0; right: 0; border-bottom-width: 1.5px; border-right-width: 1.5px; }
+
 /* Long-dash divider lines (browser `border-dashed` can't size dashes) */
 @utility divider-dashed-t {
   background-image: repeating-linear-gradient(
@@ -100,6 +155,27 @@
   background-repeat: no-repeat;
   background-position: top left, bottom left;
   background-size: 100% 2px, 100% 2px;
+}
+
+/* ─── TLDR CARDS ─── */
+.tldr-card {
+  background: transparent;
+  cursor: pointer;
+  transition: border-color 0.2s ease, background-color 0.2s ease;
+}
+
+.tldr-card:hover {
+  border-color: var(--color-line-strong);
+  background-color: rgba(255, 255, 255, 0.03);
+}
+
+.tldr-card__icon {
+  display: inline-flex;
+}
+
+.tldr-card__glyph {
+  width: 2.5rem;
+  height: 2.5rem;
 }
 
 /* ─── SITE NAV SHELL ─── */
