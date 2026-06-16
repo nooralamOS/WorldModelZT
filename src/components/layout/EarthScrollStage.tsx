@@ -100,9 +100,14 @@ export function EarthScrollStage({ children, nav, articlePreview, view }: { chil
   const specRef = useRef(DEFAULT_SPEC);
   const refreshScrollRef = useRef<(() => void) | null>(null);
   const rebuildStoryRef    = useRef<((remeasure?: boolean) => void) | null>(null);
+  // Read/restore the scroll-story progress (0→1) so a view toggle can preserve
+  // where you were instead of snapping back to the start of the earth animation.
+  const getStoryProgressRef     = useRef<(() => number) | null>(null);
+  const restoreStoryProgressRef = useRef<((p: number) => void) | null>(null);
 
   // ── DialKit disabled (imports kept) ────────────────────────
-  // const params = useDialKit('Animation', { … });
+  // Earth-in-"O" fit was tuned live, then baked into the literals below in
+  // getOWorldPropsFromDOM/Viewport: x offset -4px, y offset +4px, scale ×0.56.
 
   useEffect(() => {
     let alive = true;
@@ -668,6 +673,19 @@ export function EarthScrollStage({ children, nav, articlePreview, view }: { chil
 
     rebuildStoryRef.current = buildScrollStory;
 
+    getStoryProgressRef.current = () =>
+      scrollTimeline?.scrollTrigger?.progress ?? (scrollPastHero ? 1 : 0);
+
+    // Scroll to the position matching a 0→1 timeline progress, then sync
+    // ScrollTrigger so the earth/title/content land in their final state.
+    restoreStoryProgressRef.current = (p: number) => {
+      const st = scrollTimeline?.scrollTrigger;
+      if (!st) return;
+      const clamped = Math.min(Math.max(p, 0), 1);
+      window.scrollTo({ top: st.start + (st.end - st.start) * clamped });
+      ScrollTrigger.update();
+    };
+
     // ── Raycast, paint & drag ──────────────────────────────────
     const raycaster = new THREE.Raycaster();
     const mouse     = new THREE.Vector2();
@@ -785,13 +803,13 @@ export function EarthScrollStage({ children, nav, articlePreview, view }: { chil
       const h1Y     = new DOMMatrix(window.getComputedStyle(titleH1).transform).m42;
       const heroTop = heroInner.getBoundingClientRect().top;
       const aspect  = window.innerWidth / window.innerHeight;
-      const oCx     = oRect.left + oRect.width / 2 - 1;
-      const oCy     = (oRect.top - heroTop) - h1Y + oRect.height / 2 + 8;
+      const oCx     = oRect.left + oRect.width / 2 - 4;
+      const oCy     = (oRect.top - heroTop) - h1Y + oRect.height / 2 + 4;
 
       return {
         x:     ((oCx / window.innerWidth)  * 2 - 1) * halfH * aspect,
         y:     (-(oCy / window.innerHeight) * 2 + 1) * halfH,
-        scale: scaleForRectHeight(oRect.height) * 0.62,
+        scale: scaleForRectHeight(oRect.height) * 0.56,
       };
     }
 
@@ -799,13 +817,13 @@ export function EarthScrollStage({ children, nav, articlePreview, view }: { chil
     function getOWorldPropsViewport() {
       const oRect  = oTarget.getBoundingClientRect();
       const aspect = window.innerWidth / window.innerHeight;
-      const oCx    = oRect.left + oRect.width / 2 - 1;
-      const oCy    = oRect.top + oRect.height / 2 + 8;
+      const oCx    = oRect.left + oRect.width / 2 - 4;
+      const oCy    = oRect.top + oRect.height / 2 + 4;
 
       return {
         x:     ((oCx / window.innerWidth)  * 2 - 1) * halfH * aspect,
         y:     (-(oCy / window.innerHeight) * 2 + 1) * halfH,
-        scale: scaleForRectHeight(oRect.height) * 0.62,
+        scale: scaleForRectHeight(oRect.height) * 0.56,
       };
     }
 
@@ -932,10 +950,17 @@ export function EarthScrollStage({ children, nav, articlePreview, view }: { chil
       viewMountedRef.current = true;
       return;
     }
+    // Where were you in the earth animation before the swap? If you'd already
+    // scrolled past it (progress ≈ 1), restore that completed state after the
+    // rebuild instead of snapping back to the start of the animation.
+    const prevProgress = getStoryProgressRef.current?.() ?? 0;
+    // Measurement requires the hero in the viewport, so rebuild from the top…
     window.scrollTo({ top: 0 });
     const id = requestAnimationFrame(() => {
       rebuildStoryRef.current?.(true);
       refreshScrollRef.current?.();
+      // …then jump to the matching progress on the freshly measured layout.
+      if (prevProgress > 0) restoreStoryProgressRef.current?.(prevProgress);
     });
     return () => cancelAnimationFrame(id);
   }, [view]);

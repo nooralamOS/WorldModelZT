@@ -34,7 +34,10 @@ export function MiniGlobe({ variant, interactive = false, spin = true, className
 
       const scene = new THREE.Scene();
       const camera = new THREE.PerspectiveCamera(40, 1, 0.1, 100);
-      camera.position.set(0, 0, 3.0);
+      // At 40° FOV the sphere's angular radius is asin(1/d); to keep the full
+      // silhouette inside the frame we need asin(1/d) < 20°, i.e. d > ~2.92.
+      // 3.1 fills the box nearly edge-to-edge without clipping the sides/top.
+      camera.position.set(0, 0, 3.1);
 
       scene.add(new THREE.AmbientLight(0xffffff, 0.55));
       const sun = new THREE.DirectionalLight(0xfff4e6, 1.3);

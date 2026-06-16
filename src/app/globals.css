@@ -173,8 +173,10 @@
 /* ─── TLDR CARDS ─── */
 .tldr-card {
   position: relative;
-  /* Slightly darker than the #00158c page background so cards read as panels */
-  background: #001070;
+  /* Darker panel (#001070) up top, fading to the #00158c page background at the
+     bottom so the card dissolves into the page — aligned with the body text mask
+     (both start fading at 45%). */
+  background: linear-gradient(to bottom, #001070 45%, #00158c 100%);
   cursor: pointer;
 }
 
@@ -199,7 +201,15 @@
   opacity: 0;
 }
 
-.tldr-card:not(.tldr-card--expanded):hover .tldr-card__frame {
+/* Replace the default focus outline with the corner-bracket frame so keyboard
+   focus (incl. the button regaining focus after Esc closes the card) shows the
+   same motif as hover instead of a stray white/accent border. */
+.tldr-card:focus-visible {
+  outline: none;
+}
+
+.tldr-card:not(.tldr-card--expanded):hover .tldr-card__frame,
+.tldr-card:not(.tldr-card--expanded):focus-visible .tldr-card__frame {
   opacity: 1;
 }
 
@@ -212,6 +222,13 @@
 .tldr-card__frame .vt-corner.tr { border-top-width: 2.5px; border-right-width: 2.5px; }
 .tldr-card__frame .vt-corner.bl { border-bottom-width: 2.5px; border-left-width: 2.5px; }
 .tldr-card__frame .vt-corner.br { border-bottom-width: 2.5px; border-right-width: 2.5px; }
+
+/* Grid-card body: clipped to the available height and faded to transparent at
+   the bottom so the text dissolves into the card instead of hard-truncating. */
+.tldr-card__body-fade {
+  -webkit-mask-image: linear-gradient(to bottom, #000 45%, transparent 100%);
+  mask-image: linear-gradient(to bottom, #000 45%, transparent 100%);
+}
 
 .tldr-card__icon {
   display: inline-flex;
@@ -249,7 +266,10 @@
   min-height: 0;
   padding: 2.75rem;
   cursor: default;
-  background: var(--color-surface-elevated);
+  /* Match the grid card's panel color so it doesn't pop to a lighter blue on
+     expand. Solid #001070 (the gradient's top stop) rather than the fade — the
+     expanded panel has no "dissolve into page" bottom edge to blend toward. */
+  background: #001070;
   box-shadow: 0 30px 80px rgba(0, 0, 0, 0.45);
 }
 
