@@ -1,7 +1,11 @@
 "use client";
 
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
+import { createPortal } from "react-dom";
+import { AnimatePresence, motion } from "motion/react";
 import { DisplayTitle } from "@/components/typography/Prose";
+import { MiniGlobe } from "@/components/layout/MiniGlobe";
+import { usePretextClamp } from "@/lib/usePretextClamp";
 
 // Placeholder summaries — one per major article section. Bodies are filler for
 // now (lifted from the article so the layout reads realistically); the full
@@ -30,28 +34,9 @@ const IconGlobe = (
   </svg>
 );
 
-const IconDot = (
-  <svg viewBox="0 0 40 40" aria-hidden className="tldr-card__glyph">
-    <circle cx="20" cy="20" r="11" fill="#2b5bff" />
-  </svg>
-);
+const IconPointCloud = <MiniGlobe variant="points" spin={false} className="tldr-card__glyph" />;
 
-const IconEarth = (
-  <svg viewBox="0 0 40 40" aria-hidden className="tldr-card__glyph">
-    <defs>
-      <clipPath id="tldr-earth-clip">
-        <circle cx="20" cy="20" r="13" />
-      </clipPath>
-    </defs>
-    <circle cx="20" cy="20" r="13" fill="none" stroke="currentColor" strokeWidth="1.5" />
-    <g clipPath="url(#tldr-earth-clip)" stroke="currentColor" strokeWidth="1.5">
-      <line x1="7" y1="14" x2="33" y2="14" />
-      <line x1="7" y1="18" x2="33" y2="18" />
-      <line x1="7" y1="22" x2="33" y2="22" />
-      <line x1="7" y1="26" x2="33" y2="26" />
-    </g>
-  </svg>
-);
+const IconEarth = <MiniGlobe variant="earth" interactive className="tldr-card__glyph" />;
 
 const TLDR_CARDS: TldrCard[] = [
   {
@@ -71,7 +56,7 @@ const TLDR_CARDS: TldrCard[] = [
   {
     id: "tldr-3",
     title: "Core technical bottlenecks",
-    icon: IconDot,
+    icon: IconPointCloud,
     body:
       "Each approach has a structural ceiling. 2D models suffer compounding rollout error (worlds drift from coherence over long horizons), high control latency inherited from video-gen foundations, and ballooning compute costs. 3D models are sharper geometrically but harder to generate and animate at scale. Neither has solved persistence, controllability, and cost at the same time.",
   },
@@ -84,16 +69,77 @@ const TLDR_CARDS: TldrCard[] = [
   },
 ];
 
-export function TldrView() {
-  const [activeId, setActiveId] = useState<string | null>(null);
-  const active = TLDR_CARDS.find((c) => c.id === activeId) ?? null;
+const LAYOUT_TRANSITION = { duration: 0.28, ease: [0.22, 1, 0.36, 1] } as const;
+
+const CARD_CLAMP_LINES = 4;
+
+// Grid card. Extracted so it can call usePretextClamp — the hook measures how
+// the body actually wraps at the card's live width (via pretext: canvas
+// measurement + arithmetic, no reflow) so we can show a precise "+N lines"
+// affordance instead of a blind CSS line-clamp.
+function TldrCardButton({ card, onOpen }: { card: TldrCard; onOpen: () => void }) {
+  const { ref, hiddenLines, isClamped } = usePretextClamp<HTMLParagraphElement>(
+    card.body,
+    CARD_CLAMP_LINES,
+  );
 
   return (
-    <div id="top" className="mx-auto max-w-content px-6 sm:px-8 lg:px-12">
-      <header
-        className="flex justify-center pb-10 sm:pb-12"
-        style={{ paddingTop: "var(--tldr-title-top-spacing, clamp(7rem, 16vh, 12rem))" }}
+    <motion.button
+      layoutId={`tldr-card-${card.id}`}
+      type="button"
+      onClick={onOpen}
+      transition={LAYOUT_TRANSITION}
+      style={{ borderRadius: 2 }}
+      className="tldr-card flex min-h-[15rem] flex-col p-6 text-left"
+    >
+      <div className="flex items-center gap-3">
+        <span className="tldr-card__icon shrink-0 text-ink">{card.icon}</span>
+        <h2 className="flex-1 text-center font-mondwest text-[1.5rem] leading-[1.15] text-ink">
+          {card.title}
+        </h2>
+      </div>
+      <p
+        ref={ref}
+        className="mt-4 line-clamp-4 text-sm leading-relaxed text-ink-secondary/70"
       >
+        {card.body}
+      </p>
+      {isClamped && (
+        <span className="mt-2 text-xs uppercase tracking-wide text-ink-secondary/50">
+          +{hiddenLines} {hiddenLines === 1 ? "line" : "lines"}
+        </span>
+      )}
+      {/* Corner brackets on hover — same motif as the view toggle */}
+      <span aria-hidden className="tldr-card__frame">
+        <span className="vt-corner tl" />
+        <span className="vt-corner tr" />
+        <span className="vt-corner bl" />
+        <span className="vt-corner br" />
+      </span>
+    </motion.button>
+  );
+}
+
+export function TldrView() {
+  const [activeId, setActiveId] = useState<string | null>(null);
+  const [mounted, setMounted] = useState(false);
+  const active = TLDR_CARDS.find((c) => c.id === activeId) ?? null;
+
+  useEffect(() => setMounted(true), []);
+
+  // Esc closes the open card.
+  useEffect(() => {
+    if (!active) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setActiveId(null);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [active]);
+
+  return (
+    <div id="top" className="mx-auto flex min-h-screen max-w-content flex-col justify-center px-6 pb-16 sm:px-8 lg:px-12">
+      <header className="flex justify-center pb-8 sm:pb-10">
         {/* Invisible layout anchor — earth-hero-title shrinks into this position.
             Kept large + centered so the title lands big and centred in TLDR. */}
         <DisplayTitle
@@ -114,52 +160,67 @@ export function TldrView() {
         </DisplayTitle>
       </header>
 
-      <section id="intro" className="scroll-mt-28 pb-24">
-        {active ? (
-          <article className="mx-auto max-w-article">
-            <button
-              type="button"
-              onClick={() => setActiveId(null)}
-              className="mb-8 inline-flex items-center gap-2 font-mono text-xs uppercase tracking-[0.14em] text-muted transition-colors hover:text-ink-secondary"
-            >
-              <span aria-hidden>←</span> All summaries
-            </button>
-            <div className="flex items-start gap-4">
-              <span className="tldr-card__icon shrink-0 text-ink">{active.icon}</span>
-              <h2 className="font-mondwest text-[2.4rem] leading-[1.05] text-ink">
-                {active.title}
-              </h2>
-            </div>
-            <p className="mt-8 text-[1.0625rem] leading-[1.75] text-ink-secondary">
-              {active.body}
-            </p>
-          </article>
-        ) : (
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            {TLDR_CARDS.map((card, i) => (
-              <button
-                key={card.id}
-                type="button"
-                onClick={() => setActiveId(card.id)}
-                className={
-                  "tldr-card flex min-h-[15rem] flex-col p-6 text-left transition-colors " +
-                  (i === 0
-                    ? "border border-dashed border-line-strong"
-                    : "border border-line")
-                }
-              >
-                <span className="tldr-card__icon text-ink">{card.icon}</span>
-                <h2 className="mt-4 font-mondwest text-[1.5rem] leading-[1.15] text-ink">
-                  {card.title}
-                </h2>
-                <p className="mt-3 line-clamp-4 text-sm leading-relaxed text-ink-secondary/70">
-                  {card.body}
-                </p>
-              </button>
-            ))}
-          </div>
-        )}
+      <section id="intro" className="scroll-mt-28">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          {TLDR_CARDS.map((card) => (
+            <TldrCardButton
+              key={card.id}
+              card={card}
+              onOpen={() => setActiveId(card.id)}
+            />
+          ))}
+        </div>
       </section>
+
+      {/* Expanded card — portaled to <body> so position:fixed isn't trapped by
+          #article-content's GSAP transform. layoutId still morphs across the
+          portal because it's the same React tree. */}
+      {mounted &&
+        createPortal(
+          <AnimatePresence>
+            {active && (
+              <motion.div
+                key="tldr-overlay"
+                className="tldr-overlay"
+                onClick={() => setActiveId(null)}
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.25, ease: "easeOut" }}
+              >
+                <motion.div
+                  layoutId={`tldr-card-${active.id}`}
+                  transition={LAYOUT_TRANSITION}
+                  style={{ borderRadius: 2 }}
+                  className="tldr-card tldr-card--expanded border border-line"
+                  onClick={(e) => e.stopPropagation()}
+                  role="dialog"
+                  aria-modal="true"
+                  aria-label={active.title}
+                >
+                  {/* Content fades in once the box has morphed — keeps the icon
+                      from visibly stretching while the container scales. */}
+                  <motion.div
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1, transition: { delay: 0.1, duration: 0.18 } }}
+                    exit={{ opacity: 0, transition: { duration: 0.1 } }}
+                  >
+                    <div className="flex items-center gap-4">
+                      <span className="tldr-card__icon shrink-0 text-ink">{active.icon}</span>
+                      <h2 className="font-mondwest text-[2.4rem] leading-[1.05] text-ink">
+                        {active.title}
+                      </h2>
+                    </div>
+                    <p className="mt-6 text-[1.0625rem] leading-[1.75] text-ink-secondary">
+                      {active.body}
+                    </p>
+                  </motion.div>
+                </motion.div>
+              </motion.div>
+            )}
+          </AnimatePresence>,
+          document.body,
+        )}
     </div>
   );
 }

@@ -610,11 +610,33 @@ export function EarthScrollStage({ children, nav, articlePreview, view }: { chil
         }, 'tocIn');
       }
 
-      scrollTimeline.fromTo(articleContent,
-        { autoAlpha: 0, y: -120 },
-        { autoAlpha: 1, y: 0, duration: 0.24, ease: 'power2.out' },
-        0.73
-      );
+      // TLDR cards sit in a fixed spot and simply fade in. Rather than scrub the
+      // reveal with scroll (which makes them appear to "come up"), play a real,
+      // time-based opacity fade once the title has landed (timeline ≈ 0.73), so
+      // they fade in place. The full article keeps its scrubbed slide-down reveal.
+      const isTldr = !document.getElementById('toc-sidebar');
+      if (isTldr) {
+        const cardFade = gsap.fromTo(articleContent,
+          { autoAlpha: 0 },
+          { autoAlpha: 1, duration: 0.6, ease: 'power2.out', paused: true },
+        );
+        // STORY.scrollDistance ('+=200%') → pin spans this many viewport heights.
+        const storyVH = parseFloat(STORY.scrollDistance.replace(/[^\d.]/g, '')) / 100;
+        scrollTriggers.push(
+          ScrollTrigger.create({
+            trigger: '#scroll-stage',
+            start: () => `top top-=${0.73 * storyVH * window.innerHeight}`,
+            onEnter: () => cardFade.play(),
+            onLeaveBack: () => cardFade.pause(0),
+          }),
+        );
+      } else {
+        scrollTimeline.fromTo(articleContent,
+          { autoAlpha: 0, y: -120 },
+          { autoAlpha: 1, y: 0, duration: 0.24, ease: 'power2.out' },
+          0.73,
+        );
+      }
 
       // Fly-in only on the timeline (0→flyEnd). After that, live DOM lock tracks the O glyph.
       const sampleEarthAtProgress = (p: number) => {
