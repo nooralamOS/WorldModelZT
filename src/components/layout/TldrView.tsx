@@ -3,20 +3,27 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { AnimatePresence, motion } from "motion/react";
-import { DialRoot, useDialKit } from "dialkit";
-import "dialkit/styles.css";
 import { DisplayTitle } from "@/components/typography/Prose";
 import { MiniGlobe } from "@/components/layout/MiniGlobe";
 
-// Placeholder summaries — one per major article section. Bodies are filler for
-// now (lifted from the article so the layout reads realistically); the full
-// copy lands later. Text is ellipsised in the grid and shown in full once a
-// card is opened.
+// One card per major article section. Each card shows a short `lead` summary in
+// the grid (ellipsised/faded) and, once opened, the full set of takeaways: a
+// bulleted `points` list for the article sections (cards 1–3) or a single prose
+// `body` for card 4 (Experiments), which has no source in Key-takeaways.md yet.
+// Each point can carry a bold `term` lead-in (mirroring the markdown's emphasis)
+// and nested `children` for the sub-bullets in the source doc. Text is verbatim
+// from public/World Model - Keytakeawys.md.
+type TldrPoint = { term?: string; text: string; children?: TldrPoint[] };
 type TldrCard = {
   id: string;
   title: string;
-  body: string;
   icon: ReactNode;
+  // Short summary shown in the grid preview.
+  lead: string;
+  // Expanded view: bulleted takeaways (cards 1–3) …
+  points?: TldrPoint[];
+  // … or a single prose paragraph (card 4).
+  body?: string;
 };
 
 const IconRing = (
@@ -50,27 +57,123 @@ const TLDR_CARDS: TldrCard[] = [
     id: "tldr-1",
     title: "What is a world model?",
     icon: IconRing,
-    body:
-      "A world model is an action-conditioned forward dynamics model: given a state and an action, it predicts the next state — which excludes passive video generators like Sora. The main families are 2D generative models (frame-by-frame video) and 3D models that maintain an explicit, persistent scene representation. The distinction matters because only one of them keeps the world coherent when you stop looking.",
+    lead:
+      `"World model" is an overloaded term — it gets applied to everything from video generators to planning algorithms, which creates more confusion than clarity.`,
+    points: [
+      {
+        term: `"World model" is an overloaded term`,
+        text: `— it gets applied to everything from video generators to planning algorithms, which creates more confusion than clarity. A few things worth grounding before going further:`,
+      },
+      {
+        term: `This isn't a new idea.`,
+        text: `The concept predates modern AI. We trace four distinct waves of world model research going back decades, with recurring themes around how machines build internal representations of their environment.`,
+      },
+      {
+        term: `Our definition is specific.`,
+        text: `For this deep-dive, we use "world model" to mean an action-conditioned forward dynamics model: which means given a state and an action, what happens next? This deliberately excludes video generation models like Sora or Veo — impressive as they are, they don't model the consequences of acting within a generated world.`,
+      },
+      {
+        term: `Taxonomy is harder than it looks.`,
+        text: `There's no shortage of survey papers and VC articles attempting to categorize this space. The honest answer is that neat categorizations are elusive, and they don't reliably signal model quality anyway. Rather than forcing a taxonomy, we organize the landscape by use case. The most meaningful structural difference is how state is represented: in 2D vs. 3D.`,
+      },
+      {
+        term: `One important clarification on latent space models.`,
+        text: `We don't treat these as a separate category (and intentionally left them off the taxonomy diagram). Every world model has an internal latent representation. The term "latent space model" refers to a training supervision choice, not a different model architecture: does the model compute losses on semantic outputs only (as in JEPA), or does it also compute reconstruction losses on pixels? Some models do both — for example, predicting semantic outputs at every step while computing reconstruction losses every ten steps. That's a training decision, not a fundamental architectural divide.`,
+      },
+    ],
   },
   {
     id: "tldr-2",
     title: "Who's building them and what for?",
     icon: IconGlobe,
-    body:
-      "Five application areas are emerging. Film (World Labs' Marble) bets on 3D for geometric consistency across shots. Gaming (Moonlake, General Intuition) exploits the play-data flywheel. Autonomous driving (Tesla, Waymo) uses world models for closed-loop simulation. Robotics treats them as learned physics. And general-purpose agents use them to plan over imagined futures.",
+    lead:
+      `We're in a Cambrian explosion of world model applications. We've mapped the application, input, conditioning, and output structure of the major players in the table below (based on those that have released their world models).`,
+    points: [
+      {
+        text: `We're in a Cambrian explosion of world model applications. We've mapped the application, input, conditioning, and output structure of the major players in the table below (based on those that have released their world models).`,
+        children: [
+          {
+            text: `We want to point out that the underlying approach from the model companies is quite similar (input: camera, conditioning: language / action) and output as video / action. For robotics, proprioception (robots' joint angles, forces, velocities are also added as an input). Some models advertise additional output types, but these are generally straightforward extensions rather than meaningful architectural differentiators.`,
+          },
+          {
+            text: `On the strategic side, many companies are converging on a two-horizon positioning: entertainment (gaming, film) as the near- to medium-term revenue use case, with robotics and physical AI as the medium- to long-term target.`,
+          },
+        ],
+      },
+      {
+        term: `There's a spectrum in terms of tech maturity:`,
+        text: ``,
+        children: [
+          {
+            term: `Autonomous vehicles.`,
+            text: `The most familiar application of world models is in AV — and historically, one of the clearest motivating use cases. The core challenge in AV is the long tail of rare but dangerous scenarios that are difficult or impossible to collect real-world data for. World models offer a path around this: simulate the edge cases rather than wait for incidents to happen. The AV setting is also well-suited to world models structurally. The action space is relatively low-dimensional (a car moves in two dimensions with a limited set of controls at any given time), and contact dynamics are simple: a single, consistent point of interaction with the world, rubber on road.`,
+          },
+          {
+            term: `Entertainment.`,
+            text: `World models are now also being used in gaming and film production. In gaming specifically, world models unlock an interesting data flywheel: companies like Moonlake are building systems that generate interactive game worlds while simultaneously capturing user keystrokes and interactions — turning gameplay itself into a source of training signal. Additionally, we also see these companies allowing end users to "vibe code" games specifically. The most common use case though is in open world exploration type of games.`,
+          },
+          {
+            term: `Robotics.`,
+            text: `Robotics is arguably the most diverse and demanding application of world models. Historically, robots were trained using traditional simulators — purpose-built environments that generate synthetic experience for the robot to learn from. World models are now emerging as an alternative to those simulators, and in some architectures, as the policy itself.`,
+            children: [
+              {
+                text: `From 2023 – 2025, Visual Language Action models (VLAs) dominated. Built on top of foundation VLMs like Gemini or PaliGemma, VLAs layer robot action data onto a pretrained vision-language backbone.`,
+                children: [
+                  {
+                    text: `The key advantage: as the underlying VLM improves, so does the VLA — better language and visual reasoning translates directly into better high-level planning.`,
+                  },
+                  {
+                    text: `A VLA that can recognize a banana and understand "make coffee" can begin composing multi-step action sequences from that semantic understanding. The limitation is data hunger; VLAs struggle with actions outside their training distribution.`,
+                  },
+                ],
+              },
+              {
+                text: `In 2025, World Action Models (WAMs) moved to the center of attention — catalyzed in large part by NVIDIA's DreamZero paper.`,
+                children: [
+                  {
+                    text: `WAMs take a different bet: rather than inheriting reasoning from a language backbone, they focus on learning physics.`,
+                  },
+                  {
+                    text: `When asked to complete a task outside their training set, WAMs are better at composing novel physical actions from first principles — and they require significantly less data to do so. The tradeoff is the inverse of VLAs: stronger on physical generalization, weaker on high-level reasoning and strategic planning.`,
+                  },
+                ],
+              },
+            ],
+          },
+          {
+            text: `The robotics community's excitement about WAMs comes down to where the bottleneck actually is. If the hard problem is robotics data— reliably manipulating objects in a messy, contact-rich world — then it makes sense to invest in a model architecture purpose-built for that. The reasoning gap is real, but addressable: one promising direction is a hybrid architecture where a world model handles the physical execution while taking instructions from a VLM that handles planning. The two approaches could be less competitors than complements.`,
+          },
+        ],
+      },
+    ],
   },
   {
     id: "tldr-3",
     title: "Core technical bottlenecks",
     icon: IconPointCloud,
-    body:
-      "Each approach has a structural ceiling. 2D models suffer compounding rollout error (worlds drift from coherence over long horizons), high control latency inherited from video-gen foundations, and ballooning compute costs. 3D models are sharper geometrically but harder to generate and animate at scale. Neither has solved persistence, controllability, and cost at the same time.",
+    lead:
+      `World models have always carried the weight of outsized expectations. As Chris Paxton noted, they have "historically really underperformed" — action-conditioned world models in particular have struggled to produce real value.`,
+    points: [
+      {
+        text: `World models have always carried the weight of outsized expectations. As Chris Paxton noted, they have "historically really underperformed" — action-conditioned world models in particular have struggled to produce real value.`,
+      },
+      {
+        text: `What's different this time is a confluence of three factors: video generation models have improved dramatically, more training data is now available, and architectural advances have meaningfully raised the ceiling on what these models can do.`,
+      },
+      {
+        text: `That said, challenges remain. Current 2D models like Genie suffer from spatiotemporal inconsistency — the generated world drifts and contradicts itself over time. 3D models like Marble struggle with dynamic content; they handle static scenes well but break down when objects move or interact. For robotics specifically, a sharper criticism is reliability: world model-based approaches don't yet match the performance consistency we see from on-robot reinforcement learning methods like RL-100 or pi-0.6*.`,
+      },
+      {
+        text: `Solving these challenges is an open research problem. The most promising near-term direction is memory — giving models an explicit mechanism to store and retrieve past environmental states, rather than relying on context windows alone. Architectures like WorldMem are early demonstrations of this approach, extending coherent generation from a handful of frames to hundreds. Whether this is sufficient to close the reliability gap, particularly for robotics, remains to be seen.`,
+      },
+    ],
   },
   {
     id: "tldr-4",
     title: "Experiments across world models",
     icon: IconEarth,
+    lead:
+      "Three hands-on prompts run across Marble, Project Genie, Odyssey, and Moonlake — testing geometric consistency, dynamic motion, and scene density.",
     body:
       "Three hands-on prompts run across Marble, Project Genie, Odyssey, and Moonlake. The brutalist library tests geometric consistency (3D wins — objects persist when you look away; 2D models lose them). The stormy cliffside tests dynamic motion and lighting. The crowded market tests scene density and how gracefully each model degrades under load.",
   },
@@ -78,9 +181,38 @@ const TLDR_CARDS: TldrCard[] = [
 
 const LAYOUT_TRANSITION = { duration: 0.28, ease: [0.22, 1, 0.36, 1] } as const;
 
-// Folder label for each card's dial controls — stable so the config and the
-// per-card lookup stay in sync.
-const cardDialKey = (card: TldrCard, i: number) => `${i + 1} · ${card.title}`;
+// Tuned per-card icon ↔ title spacing (index matches TLDR_CARDS order).
+// `gap` is the title's marginLeft; `centerTitle` left-aligns when false.
+const CARD_TITLE_TUNE = [
+  { gap: 10, centerTitle: false },
+  { gap: 20, centerTitle: false },
+  { gap: 32, centerTitle: false },
+  { gap: 18, centerTitle: false },
+] as const;
+
+// Recursive bullet list for the expanded card — renders nested `children` as
+// indented sub-bullets, mirroring the source doc's hierarchy.
+function PointList({ points }: { points: TldrPoint[] }) {
+  return (
+    <ul className="flex flex-col gap-3">
+      {points.map((point, i) => (
+        <li key={i} className="relative pl-5">
+          <span
+            aria-hidden
+            className="absolute left-0 top-[0.62em] h-[5px] w-[5px] -translate-y-1/2 rounded-full bg-ink-secondary/70"
+          />
+          {point.term && <strong className="font-semibold text-ink">{point.term} </strong>}
+          {point.text}
+          {point.children && (
+            <div className="mt-3">
+              <PointList points={point.children} />
+            </div>
+          )}
+        </li>
+      ))}
+    </ul>
+  );
+}
 
 // Grid card. The body is truncated with CSS line-clamp.
 function TldrCardButton({
@@ -125,7 +257,7 @@ function TldrCardButton({
         </motion.h2>
       </div>
       <p className="tldr-card__body-fade mt-4 min-h-0 flex-1 overflow-hidden text-sm leading-relaxed text-ink-secondary/70">
-        {card.body}
+        {card.lead}
       </p>
       {/* Corner brackets on hover — same motif as the view toggle */}
       <span aria-hidden className="tldr-card__frame">
@@ -142,22 +274,6 @@ export function TldrView() {
   const [activeId, setActiveId] = useState<string | null>(null);
   const [mounted, setMounted] = useState(false);
   const active = TLDR_CARDS.find((c) => c.id === activeId) ?? null;
-
-  // Live tuning for the icon ↔ title spacing — one folder per card so each can
-  // be adjusted independently. `gap` is the title's marginLeft, so it can go
-  // NEGATIVE to pull the title in tight (handy for cards 3 & 4, whose MiniGlobe
-  // icons carry their own whitespace). `centerTitle` toggles centering the
-  // title in the leftover space vs. left-aligning it next to the icon. Bake the
-  // values you settle on back into the markup once you're happy.
-  const dial = useDialKit(
-    "TLDR card titles",
-    Object.fromEntries(
-      TLDR_CARDS.map((card, i) => [
-        cardDialKey(card, i),
-        { gap: [8, -48, 48], centerTitle: true },
-      ]),
-    ),
-  ) as Record<string, { gap: number; centerTitle: boolean }>;
 
   useEffect(() => setMounted(true), []);
 
@@ -196,18 +312,15 @@ export function TldrView() {
 
       <section id="intro" className="scroll-mt-28">
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          {TLDR_CARDS.map((card, i) => {
-            const tune = dial[cardDialKey(card, i)];
-            return (
-              <TldrCardButton
-                key={card.id}
-                card={card}
-                onOpen={() => setActiveId(card.id)}
-                iconGap={tune?.gap ?? 8}
-                centerTitle={tune?.centerTitle ?? true}
-              />
-            );
-          })}
+          {TLDR_CARDS.map((card, i) => (
+            <TldrCardButton
+              key={card.id}
+              card={card}
+              onOpen={() => setActiveId(card.id)}
+              iconGap={CARD_TITLE_TUNE[i].gap}
+              centerTitle={CARD_TITLE_TUNE[i].centerTitle}
+            />
+          ))}
         </div>
       </section>
 
@@ -257,22 +370,31 @@ export function TldrView() {
                       {active.title}
                     </motion.h2>
                   </div>
-                  <motion.p
-                    className="mt-6 text-[1.0625rem] leading-[1.75] text-ink-secondary"
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1, transition: { delay: 0.12, duration: 0.2 } }}
-                    exit={{ opacity: 0, transition: { duration: 0.08 } }}
-                  >
-                    {active.body}
-                  </motion.p>
+                  {active.points ? (
+                    <motion.div
+                      className="mt-6 text-[1.0625rem] leading-[1.65] text-ink-secondary"
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1, transition: { delay: 0.12, duration: 0.2 } }}
+                      exit={{ opacity: 0, transition: { duration: 0.08 } }}
+                    >
+                      <PointList points={active.points} />
+                    </motion.div>
+                  ) : (
+                    <motion.p
+                      className="mt-6 text-[1.0625rem] leading-[1.75] text-ink-secondary"
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1, transition: { delay: 0.12, duration: 0.2 } }}
+                      exit={{ opacity: 0, transition: { duration: 0.08 } }}
+                    >
+                      {active.body}
+                    </motion.p>
+                  )}
                 </motion.div>
               </motion.div>
             )}
           </AnimatePresence>,
           document.body,
         )}
-
-      <DialRoot position="top-right" />
     </div>
   );
 }

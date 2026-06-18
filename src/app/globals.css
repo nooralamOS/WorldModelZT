@@ -173,11 +173,40 @@
 /* ─── TLDR CARDS ─── */
 .tldr-card {
   position: relative;
-  /* Darker panel (#001070) up top, fading to the #00158c page background at the
-     bottom so the card dissolves into the page — aligned with the body text mask
-     (both start fading at 45%). */
-  background: linear-gradient(to bottom, #001070 45%, #00158c 100%);
+  /* Solid darker panel. Instead of a smooth bottom gradient, the card itself is
+     masked so its bottom edge dissolves into the page with a grainy DITHER: the
+     noise speckles punch holes straight through to the brighter page surface
+     (#0127ff), which is what makes the effect actually read. (The old
+     #001070→#00158c fade was two near-identical blues, so it looked like nothing.)
+
+     Grainy-gradient technique (css-tricks.com/grainy-gradients). Two mask layers,
+     composited with `add`:
+       1. SVG feTurbulence noise, thresholded into ~1-bit dots — opaque dots keep
+          the card, the gaps become holes that reveal the page through it.
+       2. a vertical gradient, opaque to 45% then fading out, which forces the top
+          of the card fully solid and only lets the noise punch holes toward the
+          bottom (`add` → top stays solid; bottom = noise dots only).
+     feColorMatrix lifts the noise's red channel into the alpha channel. */
+  --tldr-dither:
+    url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20width='140'%20height='140'%3E%3Cfilter%20id='d'%3E%3CfeTurbulence%20type='fractalNoise'%20baseFrequency='0.8'%20numOctaves='2'%20stitchTiles='stitch'/%3E%3CfeColorMatrix%20type='matrix'%20values='0%200%200%200%200%200%200%200%200%200%200%200%200%200%200%201%200%200%200%200'/%3E%3CfeComponentTransfer%3E%3CfeFuncA%20type='discrete'%20tableValues='0%200%201%201%201%201'/%3E%3C/feComponentTransfer%3E%3C/filter%3E%3Crect%20width='100%25'%20height='100%25'%20filter='url(%23d)'/%3E%3C/svg%3E"),
+    linear-gradient(to bottom, #000 45%, transparent 100%);
+  -webkit-mask-image: var(--tldr-dither);
+  mask-image: var(--tldr-dither);
+  -webkit-mask-size: 140px 140px, 100% 100%;
+  mask-size: 140px 140px, 100% 100%;
+  -webkit-mask-repeat: repeat, no-repeat;
+  mask-repeat: repeat, no-repeat;
+  -webkit-mask-composite: source-over; /* legacy WebKit name for `add` */
+  mask-composite: add;
+
+  background: #001070;
   cursor: pointer;
+}
+
+/* The expanded card is a full readable dialog — no bottom dissolve there. */
+.tldr-card--expanded {
+  -webkit-mask-image: none;
+  mask-image: none;
 }
 
 /* Bridge the horizontal grid gap (1rem) so the hover frame stays lit while the
@@ -253,8 +282,13 @@
   inset: 0;
   z-index: 60;
   display: flex;
-  align-items: center;
-  justify-content: center;
+  /* The OVERLAY is the scroll container (not the card). Centering the card with
+     margin:auto instead of align-items:center sidesteps the flexbox bug where a
+     card taller than the viewport gets clipped at the top and unreachable —
+     here a tall card anchors to the top and you scroll down to reveal the rest,
+     like a receipt. overscroll-behavior stops the wheel reaching the page. */
+  overflow-y: auto;
+  overscroll-behavior: contain;
   padding: 6rem 1.5rem;
   background: rgba(0, 6, 48, 0.55);
   backdrop-filter: blur(2px);
@@ -263,7 +297,7 @@
 .tldr-card--expanded {
   position: relative;
   width: min(40rem, 100%);
-  min-height: 0;
+  margin: auto;
   padding: 2.75rem;
   cursor: default;
   /* Match the grid card's panel color so it doesn't pop to a lighter blue on
