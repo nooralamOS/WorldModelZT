@@ -37,8 +37,14 @@ const MOMENTUM_FRICTION = 0.95;
 const MAX_FLING = 9.0;
 const IDLE_SPIN = 0.08;
 const INITIAL_EARTH_TILT_DEG = 12;
-const BRUSH_RADIUS = 26;
-const MASK_DECAY = 0.014;
+const MASK_CELL = 4;        // px per pixel-cell on the 512² mask → 128×128 grid
+const BRUSH_MAX = 30;       // max reveal radius in mask px (at full speed)
+const BRUSH_MIN_FRAC = 0.2; // radius floor as a fraction of BRUSH_MAX (first touch)
+const MASK_NOISE = 7;       // ragged-edge jitter in mask px
+const VEL_GAIN = 0.42;      // how fast the brush swells with speed
+const VEL_REF = 1.5;        // contact-point speed (mask px/ms) that maxes the brush
+const CELL_LIFE_MIN = 80;   // ms a revealed cell stays lit before fading
+const CELL_LIFE_RAND = 340; // + up to this many ms (staggered dissolve)
 const READOUT_STORAGE_KEY = 'wmzt-earth-readout-v2';
 // Resting offset that tucks the title fully below the clip baseline before it's
 // revealed. Must clear the font's line-box overflow (line-height: 0.95) or the
@@ -168,6 +174,34 @@ export function EarthScrollStage({ children, nav, articlePreview, view }: { chil
     maskCtx.fillStyle = '#000';
     maskCtx.fillRect(0, 0, MASK_SZ, MASK_SZ);
     const maskTex = new THREE.CanvasTexture(maskCanvas);
+    maskTex.magFilter = THREE.NearestFilter;   // crisp pixel blocks — the "image-rendering: pixelated" of 3D
+    maskTex.minFilter = THREE.NearestFilter;
+    maskTex.generateMipmaps = false;
+
+    // ── Pixel-grid etch-trail reveal state (Browserbase-style, in UV space) ──
+    const MASK_GRID = MASK_SZ / MASK_CELL;     // 128 cells per axis
+    const hashNoise = (x: number, y: number) => {
+      const a = Math.sin(127.1 * x + 311.7 * y) * 43758.5453;
+      return (a - Math.floor(a)) * 2 - 1;
+    };
+    const cells = Array.from({ length: MASK_GRID * MASK_GRID }, (_, i) => ({
+      revealed: false,
+      expiresAt: 0,
+      noise: MASK_NOISE * hashNoise((i % MASK_GRID) * 0.5, Math.floor(i / MASK_GRID) * 0.5),
+    }));
+    const liveCells = new Set<number>();
+    let maskDirty = false;
+    let etchB = 0;                             // speed-driven brush intensity (BRUSH_MIN_FRAC → 1)
+    let prevMx: number | null = null, prevMy = 0;
+
+    const setMaskCell = (i: number, col: number, row: number, on: boolean) => {
+      const cell = cells[i];
+      if (cell.revealed === on) return;
+      cell.revealed = on;
+      maskCtx.fillStyle = on ? '#fff' : '#000';
+      maskCtx.fillRect(col * MASK_CELL, row * MASK_CELL, MASK_CELL, MASK_CELL);
+      maskDirty = true;
+    };
 
     // earthScroll → position/scale  |  earthDrag → drag rotation  |  earthOrient → geometry holder
     const earthScroll  = new THREE.Group();
@@ -771,30 +805,70 @@ export function EarthScrollStage({ children, nav, articlePreview, view }: { chil
     window.addEventListener('pointercancel', endDrag as EventListener);
     window.addEventListener('pointerleave',  onPointerLeave);
 
-    function paint(u: number, v: number) {
-      const x = u * MASK_SZ;
-      const y = (1 - v) * MASK_SZ;
-      const r = BRUSH_RADIUS;
-      const stroke = (px: number, py: number) => {
-        const g = maskCtx.createRadialGradient(px, py, 0, px, py, r);
-        g.addColorStop(0,    'rgba(255,255,255,1)');
-        g.addColorStop(0.65, 'rgba(255,255,255,1)');
-        g.addColorStop(1,    'rgba(255,255,255,0)');
-        maskCtx.globalCompositeOperation = 'source-over';
-        maskCtx.fillStyle = g;
-        maskCtx.fillRect(px - r, py - r, r * 2, r * 2);
-      };
-      stroke(x, y);
-      if (u < 0.08) stroke(x + MASK_SZ, y);
-      if (u > 0.92) stroke(x - MASK_SZ, y);
-      maskTex.needsUpdate = true;
+    // Reveal one circular dab of pixel-cells centred at mask px (mx, my).
+    // Columns wrap around the longitude seam; rows (latitude) are clamped.
+    function etchStamp(mx: number, my: number, radius: number, now: number) {
+      const r2 = radius + MASK_NOISE;
+      const c0 = Math.floor((mx - r2) / MASK_CELL), c1 = Math.ceil((mx + r2) / MASK_CELL);
+      const r0 = Math.max(0, Math.floor((my - r2) / MASK_CELL));
+      const r1 = Math.min(MASK_GRID - 1, Math.ceil((my + r2) / MASK_CELL));
+      for (let ry = r0; ry <= r1; ry++) {
+        for (let cx = c0; cx <= c1; cx++) {
+          const wcx = ((cx % MASK_GRID) + MASK_GRID) % MASK_GRID;
+          const i = ry * MASK_GRID + wcx;
+          const cell = cells[i];
+          const rad = radius + cell.noise;
+          if (rad <= 0) continue;
+          const dx = cx * MASK_CELL + MASK_CELL / 2 - mx;
+          const dy = ry * MASK_CELL + MASK_CELL / 2 - my;
+          if (dx * dx + dy * dy < rad * rad) {
+            setMaskCell(i, wcx, ry, true);
+            cell.expiresAt = now + CELL_LIFE_MIN + CELL_LIFE_RAND * Math.random();
+            liveCells.add(i);
+          }
+        }
+      }
     }
 
-    function decayMask(dt: number) {
-      maskCtx.globalCompositeOperation = 'source-over';
-      maskCtx.fillStyle = `rgba(0, 0, 0, ${MASK_DECAY * dt * 60})`;
-      maskCtx.fillRect(0, 0, MASK_SZ, MASK_SZ);
-      maskTex.needsUpdate = true;
+    // Stamp dabs along prev → (mx, my) so a fast-moving contact point stays continuous.
+    function etchLine(mx: number, my: number, radius: number, now: number) {
+      const seamJump = prevMx === null ||
+        Math.abs(mx - prevMx) > MASK_SZ * 0.5 || Math.abs(my - prevMy) > MASK_SZ * 0.5;
+      if (seamJump) {
+        etchStamp(mx, my, radius, now);
+      } else {
+        const dist = Math.hypot(mx - prevMx!, my - prevMy);
+        const step = Math.max(MASK_CELL, radius * 0.5);   // < radius ⇒ dabs overlap
+        const steps = Math.min(256, Math.ceil(dist / step));
+        for (let s = 1; s <= steps; s++) {
+          const t = s / steps;
+          etchStamp(prevMx! + (mx - prevMx!) * t, prevMy + (my - prevMy) * t, radius, now);
+        }
+      }
+      prevMx = mx; prevMy = my;
+    }
+
+    // Reveal at hover UV; radius is small on first touch and blooms with contact-point speed.
+    function paint(u: number, v: number, now: number, dt: number) {
+      const mx = u * MASK_SZ, my = (1 - v) * MASK_SZ;
+      let speed = 0; // mask px per ms
+      if (prevMx !== null && dt > 0 &&
+          Math.abs(mx - prevMx) < MASK_SZ * 0.5 && Math.abs(my - prevMy) < MASK_SZ * 0.5) {
+        speed = Math.hypot(mx - prevMx, my - prevMy) / (dt * 1000);
+      }
+      etchB = Math.max(BRUSH_MIN_FRAC, etchB * Math.pow(0.9, dt * 60)); // decay toward floor
+      etchB = Math.min(1, etchB + VEL_GAIN * Math.min(1, speed / VEL_REF)); // swell with speed
+      etchLine(mx, my, BRUSH_MAX * etchB, now);
+    }
+
+    // Clear cells whose lifetime elapsed → the dissolving pixel trail.
+    function decayMask(now: number) {
+      for (const i of liveCells) {
+        if (cells[i].expiresAt <= now) {
+          setMaskCell(i, i % MASK_GRID, Math.floor(i / MASK_GRID), false);
+          liveCells.delete(i);
+        }
+      }
     }
 
     // Hero-pinned coords — used only when sampling timeline keyframes at build time.
@@ -868,9 +942,15 @@ export function EarthScrollStage({ children, nav, articlePreview, view }: { chil
         earthDrag.rotation.y += IDLE_SPIN * dt;
       }
 
+      const nowMs = performance.now();
       const uv = hoverUv as { u: number; v: number } | null;
-      if (uv && !drag.active) paint(uv.u, uv.v);
-      decayMask(dt);
+      if (uv && !drag.active) {
+        paint(uv.u, uv.v, nowMs, dt);
+      } else {
+        prevMx = null; // break the trail when not hovering / while dragging
+      }
+      decayMask(nowMs);
+      if (maskDirty) { maskTex.needsUpdate = true; maskDirty = false; }
 
       applyEarthPosition();
 
