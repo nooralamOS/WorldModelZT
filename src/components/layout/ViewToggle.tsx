@@ -92,15 +92,27 @@ export function ViewToggle({ view, onChange }: ViewToggleProps) {
           aria-hidden
           className="view-toggle__frame"
           style={{
-            transform: `translate(${frame.left}px, ${frame.top}px)`,
-            width: frame.width,
+            transform: `translateY(${frame.top}px)`,
             height: frame.height,
           }}
         >
-          <span className="vt-corner tl" />
-          <span className="vt-corner tr" />
-          <span className="vt-corner bl" />
-          <span className="vt-corner br" />
+          {/* Both edges move via transform only so they stay composited in
+              lockstep — animating `width` (a layout prop) alongside `transform`
+              lets the right edge lag behind the left. */}
+          <span
+            className="vt-edge"
+            style={{ transform: `translateX(${frame.left}px)` }}
+          >
+            <span className="vt-corner tl" />
+            <span className="vt-corner bl" />
+          </span>
+          <span
+            className="vt-edge"
+            style={{ transform: `translateX(${frame.left + frame.width}px)` }}
+          >
+            <span className="vt-corner tr" />
+            <span className="vt-corner br" />
+          </span>
         </span>
       )}
       {ITEMS.map((item) => {

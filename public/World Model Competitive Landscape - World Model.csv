@@ -1,0 +1,46 @@
+,,,,,,,,,,,,,,,,,,,,,,,,
+,,,,,,Input>>,,,,,,,,Output>>,,,,,,,,,,
+,,,,,,"State>>
+Where things are right now? ",,,"Conditioning>>
+What to achieve? (e.g., pick up the red cup)",,,,,,,,,,,,,,,
+,Company,Application,Latest Model,Training Data,,Camera,"Propricoeption
+Joint angles, forces, velocities",Tactile,"Language
+High-level semantic instruction","Action
+Low-level control",Goal Image,Goal Video,,Video,"Action
+Discrete / immediate control outputs","State
+Representation of the world ",Image,"Trajectories
+Sequence of actions/states",,"Interaction
+How does user interact with the model? ","Horizon
+How long does the model remain coherent?",Pricing,Comments,Status
+,Odyseey,Entertainment,Odyssey-2,2D,,X,,,,X,,,,X,,,,,,"Prompt, choice of two actions at one time; look around with your mouse",Multiple minutes,Beta offered for free,Recently launched multi-agents model (4 agents max) that allow multiple agents to interact in the same world,Checked
+,Decart,Entertainment,Oasis,2D,,X,,,,X,,,,X,,,,,,"Move with WASD, look with your mouse, jump with Space, run with Ctrl, open inventory with E, select items with 1–9, sneak with Shift, hit with 0 or mouse, drop with mouse, and open the menu with ESC.",Up to 5 seconds,"Beta offered for free
+Open weight",,Checked
+,Overworld,Entertainment,Waypoint 1.5,2D,,X,,,,X,,,,X,,,,,,"Move with WASD, look with your mouse",30 seconds,Open sourced,,Checked
+,Moonlake,"Entertainment, Robotics",Reverie,2D / 3D Semantics,,X,,,,X,,,,X,,,,,,"Move with WASD, look with your mouse, jump with Space, sprint with Shift, and free the mouse with ESC.",Very long (worlds are persistent),"$15 per month per 1,000 creditss","Training on both 2D and 3D semantics is a pragmatic solution to data problem. Pure 3D training data is expensive and scarce — so rather than relying on it exclusively, these models incorporate 2D video and 3D signals (depth, shape, spatial layout). ",5/26 - Confirmed with Fan-Yun Sun (founder)
+,Google,"Entertainment, AV",Genie,2D,,X,,,X,X,,,,X,X,,,,,"Move with WASD, jump with space, look with up, down, left and right keys",60 seconds,Beta offered as part of Google AI Ultra ($99.99 / month),"-Language condition includes adjustment, such as time of the day, weather conditions
+-LiDAR action output",Checked
+,Runway AI,"Entertainment, Robotics",GWM-1,2D,,X,X,,X,X,,,,X,X,,,,,"Prompt, Move with WASD",Not disclosed,Not disclosed,"Build on top of Runway's Gen-4.5 video model
+Different models; GWM World, GWM Robotics, Runway Characteristics",5/22 - Reached out to Anastasis Germanidis (CTO) and Ziyi Tang (Head of GWM) 
+,World Labs,"Entertainment, Robotics",Marble,3D,,X,,,X,,X,,,X,,X,X,,,"Move forward/left/backward/right with WASD, move up with E or Space, move down with Q, move faster with Shift, change FOV with [ ], return to origin with 0, toggle Natural Mouse (content tracks mouse movement), and toggle Invert Trackpad Drag.",Very long (worlds are persistent),"$0.80 USD per 1,000 credits
+Minimum credit purchase: $5 USD for 6,250 credits","World Labs' worlds can be edited, expanded, exported (as Gaussian splats, meshes, or video) ",
+,Rhoda AI,Robotics,Driect Video-Action,2D,,X,X,,X,X*,,,,X,X,,,,,Not applicable,Robotics task: ~5 mintues,RaaS model,"Action conditioned is nuanced as it's used internall btween inference steps for trajectory continunity, but it's not a user-facing conditiong input in the same way as Waymo.",5/26 - Confirmed with Rhoda
+,Genesis AI ,Robotics,Genesis-26.5,2D,,,X,,X,,X,,,X,X,X,X,X,,Not applicable,Robotics task: 4 minutes from the demo released,Not commercialized,"Need to confirm our understanding. Their blog mentioned that they have ""EMF-based finger tracking and dense tactile sensing across the hand.""",5/26 - Reached out Theophile
+,NVIDIA,Robotics,Dream Zero,2D,,X,X,,X,X,,,,X,X,,,X,,Not applicable,Tasks released are up to 10 minutes,Open sourced,New embodiment adaption with up to 30 minutes of play data,5/26 - confirmed with Joel Jang
+,NVIDIA,"AV, Robotics",Cosmos,2D,,X,X,,X,,X,,,X,,,,,,Not applicable,"Video generation: 30 seconds
+Robot actions: 44 seconds",Open sourced,"For AV use case, you can also add vehicle trajectory",Checked
+,*Note: only includes companies that released world models publicly ,,,,,,,,,,,,,,,,,,,,,,,
+,,,,,,,,,,,,,,,,,,,,,,,,
+,Sunday Robotics,Robotics,,,,,,,,,,,,,,,,,,,,,,
+,Generalist,Robotics,,,,,,,,,,,,,,,,,,,,,,
+,General Intuition,Entertainment,,,,,,,,,,,,,,,,,,,,,,
+,Physical Intelligence,Robotics,,,,,,,,,,,,,,,,,,,,,,
+,Morpheus,Entertainment,,,,,,,,,,,,,,,,,,,,,,
+,Saturn Dynamics,Robotics,,,,,,,,,,,,,,,,,,,,,,
+,Third Dimension,AV,,,,,,,,,,,,,,,,,,,,,,
+,Sancho,Robotics,,,,,,,,,,,,,,,,,,,,,,
+,Embo,Robotics,Not announced,V + A,,X,X,,,,,,,,X,X,,,,,,,Based on DayDreamer,
+,OneWorld AI,Robotics,,,,,,,,,,,,,,,,,,,,,,
+,,,,,,,,,,,,,,,,,,,,,,,,
+,,,,,,,,,,,,,,,,,,,,,,,,
+,Questions,,,,,,,,,,,,,,,,,,,,,,,
+,1. The more types of input + output used doesn't gurantee the model perform better? Then what's the key takeaway here? ,,,,,,,,,,,,,,,,,,,,,,,

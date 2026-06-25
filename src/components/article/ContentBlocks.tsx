@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect, useRef, useState } from "react";
+import Image from "next/image";
 import type { CompetitiveLandscapeEntry, ContentBlock, ExperimentLink } from "@/content/types";
 import { ExhibitFigure } from "@/components/article/ExhibitFigure";
 import { BodyText } from "@/components/typography/Prose";
@@ -38,6 +39,7 @@ function BlockRenderer({ block }: { block: ContentBlock }) {
           alt={block.alt}
           caption={block.caption}
           wide={block.wide}
+          zoomable={block.zoomable}
         />
       );
 
@@ -532,50 +534,73 @@ function GLBViewer({ src }: { src: string }) {
   return <canvas ref={canvasRef} className="h-full w-full" />;
 }
 
-const CATEGORY_COLORS: Record<string, string> = {
-  "Generative Latent Simulation": "#2979ff",
-  "Generative 3D Models": "#e040fb",
-  "Generative 2D Models": "#ff4081",
-  "JEPA": "#00e676",
-  "Robotics": "#ffab40",
+// Dots are colored by primary application (first one listed in the sheet).
+const APPLICATION_COLORS: Record<string, string> = {
+  Entertainment: "#ff4081",
+  Robotics: "#ffab40",
+  AV: "#2979ff",
 };
 
+function primaryApplication(application: string): string {
+  return application.split(",")[0].trim();
+}
+
+function applicationColor(application: string): string {
+  return APPLICATION_COLORS[primaryApplication(application)] ?? "#94a3b8";
+}
+
+function ModalityChips({ items, color }: { items: string[]; color: string }) {
+  return (
+    <div className="flex flex-wrap gap-1">
+      {items.map((item) => (
+        <span
+          key={item}
+          className="rounded-sm border px-1.5 py-0.5 font-mono text-[0.5625rem] uppercase tracking-[0.06em] text-ink-secondary"
+          style={{ borderColor: `${color}55`, background: `${color}1a` }}
+        >
+          {item}
+        </span>
+      ))}
+    </div>
+  );
+}
+
 function CompanyCard({ company }: { company: CompetitiveLandscapeEntry }) {
+  const color = applicationColor(company.application);
   return (
     <div className="flex flex-col gap-3 rounded-sm border border-line bg-surface-elevated p-4 shadow-xl">
-      <div className="font-semibold leading-tight text-ink">{company.name}</div>
-      <div className="flex flex-col gap-1.5">
-        {company.valuation && (
+      <div className="flex flex-col gap-1">
+        <div className="font-semibold leading-tight text-ink">{company.name}</div>
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 font-mono text-[0.5625rem] uppercase tracking-[0.08em] text-muted">
+          <span style={{ color }}>{company.model}</span>
+          <span aria-hidden>·</span>
+          <span>{company.trainingData}</span>
+          <span aria-hidden>·</span>
+          <span>{company.application}</span>
+        </div>
+      </div>
+      <div className="flex flex-col gap-2">
+        <div className="flex flex-col gap-1">
+          <span className="font-mono text-[0.5625rem] uppercase tracking-[0.1em] text-muted">Inputs</span>
+          <ModalityChips items={company.inputs} color={color} />
+        </div>
+        <div className="flex flex-col gap-1">
+          <span className="font-mono text-[0.5625rem] uppercase tracking-[0.1em] text-muted">Outputs</span>
+          <ModalityChips items={company.outputs} color={color} />
+        </div>
+        {company.horizon && (
           <div className="flex flex-col gap-0.5">
-            <span className="font-mono text-[0.5625rem] uppercase tracking-[0.1em] text-muted">Valuation</span>
-            <span className="text-[0.8125rem] leading-snug text-ink-secondary">{company.valuation}</span>
+            <span className="font-mono text-[0.5625rem] uppercase tracking-[0.1em] text-muted">Horizon</span>
+            <span className="text-[0.8125rem] leading-snug text-ink-secondary">{company.horizon}</span>
           </div>
         )}
-        {company.gtm && (
+        {company.pricing && (
           <div className="flex flex-col gap-0.5">
-            <span className="font-mono text-[0.5625rem] uppercase tracking-[0.1em] text-muted">GTM</span>
-            <span className="line-clamp-3 text-[0.8125rem] leading-snug text-ink-secondary">{company.gtm}</span>
-          </div>
-        )}
-        {company.stateSpace && (
-          <div className="flex flex-col gap-0.5">
-            <span className="font-mono text-[0.5625rem] uppercase tracking-[0.1em] text-muted">State Space</span>
-            <span className="text-[0.8125rem] leading-snug text-ink-secondary">{company.stateSpace}</span>
-          </div>
-        )}
-        {company.latency && (
-          <div className="flex flex-col gap-0.5">
-            <span className="font-mono text-[0.5625rem] uppercase tracking-[0.1em] text-muted">Latency</span>
-            <span className="text-[0.8125rem] leading-snug text-ink-secondary">{company.latency}</span>
+            <span className="font-mono text-[0.5625rem] uppercase tracking-[0.1em] text-muted">Pricing</span>
+            <span className="text-[0.8125rem] leading-snug text-ink-secondary">{company.pricing}</span>
           </div>
         )}
       </div>
-      {(company.hq || company.founded) && (
-        <div className="mt-auto flex flex-wrap gap-x-3 gap-y-1 border-t border-line/50 pt-3">
-          {company.hq && <span className="font-mono text-[0.625rem] text-muted">{company.hq}</span>}
-          {company.founded && <span className="font-mono text-[0.625rem] text-muted">Est. {company.founded}</span>}
-        </div>
-      )}
     </div>
   );
 }
@@ -583,56 +608,77 @@ function CompanyCard({ company }: { company: CompetitiveLandscapeEntry }) {
 function MapWithCards({ entries }: { entries: CompetitiveLandscapeEntry[] }) {
   const [hovered, setHovered] = useState<string | null>(null);
   const hoveredEntry = entries.find((e) => e.name === hovered) ?? null;
+  // Hover intent: keep the card open long enough to move the cursor from the
+  // marker onto the card so its text can be selected.
+  const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const openCard = (name: string) => {
+    if (closeTimer.current) clearTimeout(closeTimer.current);
+    setHovered(name);
+  };
+  const scheduleClose = () => {
+    if (closeTimer.current) clearTimeout(closeTimer.current);
+    closeTimer.current = setTimeout(() => setHovered(null), 220);
+  };
+
+  useEffect(() => () => {
+    if (closeTimer.current) clearTimeout(closeTimer.current);
+  }, []);
 
   return (
     <div
-      className="relative w-full rounded-sm border border-line bg-surface-elevated"
-      style={{ aspectRatio: "16/9" }}
+      className="relative w-full rounded-sm border border-white/20"
+      style={{ aspectRatio: "16/9", background: "#011788" }}
     >
       {/* Axis dividers */}
-      <div className="absolute inset-y-0 left-1/2 w-px bg-line/40" />
-      <div className="absolute inset-x-0 top-1/2 h-px bg-line/40" />
+      <div className="absolute inset-y-0 left-1/2 w-px bg-white/40" />
+      <div className="absolute inset-x-0 top-1/2 h-px bg-white/40" />
 
-      {/* Quadrant labels */}
-      <span className="absolute left-3 top-3 font-mono text-[0.5625rem] uppercase tracking-[0.1em] text-muted">3D · Creative</span>
-      <span className="absolute right-3 top-3 text-right font-mono text-[0.5625rem] uppercase tracking-[0.1em] text-muted">3D · Industrial</span>
-      <span className="absolute bottom-3 left-3 font-mono text-[0.5625rem] uppercase tracking-[0.1em] text-muted">2D · Creative</span>
-      <span className="absolute bottom-3 right-3 text-right font-mono text-[0.5625rem] uppercase tracking-[0.1em] text-muted">2D · Robotics</span>
+      {/* Quadrant labels — training data (vertical) × application (horizontal) */}
+      <span className="absolute left-3 top-3 font-mono text-[0.5625rem] uppercase tracking-[0.1em] text-white/50">3D · Entertainment</span>
+      <span className="absolute right-3 top-3 text-right font-mono text-[0.5625rem] uppercase tracking-[0.1em] text-white/50">3D · Robotics / AV</span>
+      <span className="absolute bottom-3 left-3 font-mono text-[0.5625rem] uppercase tracking-[0.1em] text-white/50">2D · Entertainment</span>
+      <span className="absolute bottom-3 right-3 text-right font-mono text-[0.5625rem] uppercase tracking-[0.1em] text-white/50">2D · Robotics / AV</span>
 
       {/* Axis labels */}
-      <span className="absolute left-3 top-[calc(50%+0.875rem)] font-mono text-[0.5625rem] uppercase tracking-[0.1em] text-muted">Entertainment</span>
-      <span className="absolute right-3 top-[calc(50%+0.875rem)] text-right font-mono text-[0.5625rem] uppercase tracking-[0.1em] text-muted">Robotics</span>
+      <span className="absolute left-3 top-[calc(50%+0.875rem)] font-mono text-[0.5625rem] uppercase tracking-[0.1em] text-white/50">Entertainment</span>
+      <span className="absolute right-3 top-[calc(50%+0.875rem)] text-right font-mono text-[0.5625rem] uppercase tracking-[0.1em] text-white/50">Robotics / AV</span>
 
-      {/* Company dots + labels */}
+      {/* Company logos + labels */}
       {entries.map((company) => {
         const x = company.mapX ?? 50;
         const y = 100 - (company.mapY ?? 50);
-        const color = CATEGORY_COLORS[company.category] ?? "#94a3b8";
+        const color = applicationColor(company.application);
+        const active = hovered === company.name;
         return (
           <div
             key={company.name}
             className="absolute z-10 flex cursor-pointer flex-col items-center gap-1"
-            style={{ left: `${x}%`, top: `${y}%`, transform: "translate(-50%, -50%)" }}
-            onMouseEnter={() => setHovered(company.name)}
-            onMouseLeave={() => setHovered(null)}
+            style={{ left: `${x}%`, top: `${y}%`, transform: "translate(-50%, -50%)", zIndex: active ? 30 : 10 }}
+            onMouseEnter={() => openCard(company.name)}
+            onMouseLeave={scheduleClose}
           >
-            <div className="h-2.5 w-2.5 rounded-full" style={{ background: color }} />
-            <span className="whitespace-nowrap font-mono text-[0.5rem] uppercase tracking-[0.06em] text-white/80">
+            <div className="relative h-9 w-9">
+              <Image src={company.logo} alt={`${company.name} logo`} fill sizes="36px" className="object-contain" />
+            </div>
+            <span className="whitespace-nowrap font-mono text-[0.5rem] uppercase tracking-[0.06em]" style={{ color }}>
               {company.name}
             </span>
           </div>
         );
       })}
 
-      {/* Hover card — sibling to dots, not nested inside a transform */}
+      {/* Hover card — sibling to markers; interactive so its text can be selected */}
       {hoveredEntry && (
         <div
-          className="pointer-events-none absolute z-20 w-52"
+          className="absolute z-40 w-52 cursor-auto select-text"
           style={{
             left: `${hoveredEntry.mapX ?? 50}%`,
             top: `${100 - (hoveredEntry.mapY ?? 50)}%`,
-            transform: `translate(${(hoveredEntry.mapX ?? 50) > 60 ? "calc(-100% - 14px)" : "14px"}, ${100 - (hoveredEntry.mapY ?? 50) > 55 ? "calc(-100% + 8px)" : "-8px"})`,
+            transform: `translate(${(hoveredEntry.mapX ?? 50) > 60 ? "calc(-100% - 16px)" : "16px"}, ${100 - (hoveredEntry.mapY ?? 50) > 55 ? "calc(-100% + 8px)" : "-8px"})`,
           }}
+          onMouseEnter={() => openCard(hoveredEntry.name)}
+          onMouseLeave={scheduleClose}
         >
           <CompanyCard company={hoveredEntry} />
         </div>
@@ -649,11 +695,11 @@ function CompetitiveLandscapeTable({ entries }: { entries: CompetitiveLandscapeE
         Competitive Landscape
       </figcaption>
       <MapWithCards entries={entries} />
-      <div className="mt-4 flex flex-col gap-1.5">
-        {Object.entries(CATEGORY_COLORS).map(([cat, color]) => (
-          <div key={cat} className="flex items-center gap-2">
+      <div className="mt-4 flex flex-wrap gap-x-5 gap-y-1.5">
+        {Object.entries(APPLICATION_COLORS).map(([app, color]) => (
+          <div key={app} className="flex items-center gap-2">
             <div className="h-1.5 w-1.5 flex-shrink-0 rounded-full" style={{ background: color }} />
-            <span className="font-mono text-[0.5625rem] uppercase tracking-[0.08em] text-muted">{cat}</span>
+            <span className="font-mono text-[0.5625rem] uppercase tracking-[0.08em] text-muted">{app}</span>
           </div>
         ))}
       </div>

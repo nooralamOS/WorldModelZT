@@ -37,9 +37,59 @@
   --max-width-article: 42rem;
 }
 
+/* Custom cursor values, defined once so any rule (layered or not) can reuse them.
+   Use `cursor: var(--cur-pointer)` instead of `cursor: pointer` to keep the
+   classic cursor on interactive elements that set their own cursor. */
+:root {
+  --cur-arrow: url("/cursors/classic/Normal%20Select.png") 10 10, auto;
+  --cur-pointer: url("/cursors/classic/Link%20Select.png") 10 10, pointer;
+  --cur-text: url("/cursors/classic/Text%20Select.png") 4 9, text;
+}
+
 @layer base {
   html {
     scroll-behavior: smooth;
+  }
+
+  /* ─── CUSTOM CURSORS ───
+     Classic Windows cursors, converted from .cur -> .png (browsers can't render
+     .cur reliably, and the classic I-beam is an XOR/inversion cursor that draws
+     invisibly as a static image — so it's rebuilt as a visible black+white glyph).
+     Numbers after url() are the hotspot x y. Filenames URL-encode spaces as %20. */
+  body,
+  html {
+    cursor: var(--cur-arrow);
+  }
+
+  a,
+  button,
+  [role="button"],
+  label,
+  summary,
+  select,
+  .cursor-pointer,
+  a:hover,
+  button:hover {
+    cursor: var(--cur-pointer);
+  }
+
+  input:not([type="button"]):not([type="submit"]):not([type="checkbox"]):not([type="radio"]),
+  textarea,
+  [contenteditable="true"],
+  .cursor-text,
+  /* readable text -> I-beam (links/buttons inside keep the pointer).
+     cursor is inherited, so children of these get it automatically. */
+  p,
+  li,
+  blockquote,
+  figcaption,
+  dd,
+  dt,
+  td,
+  th,
+  .prose-content,
+  .tldr-card__body {
+    cursor: var(--cur-text);
   }
 
   body {
@@ -57,6 +107,14 @@
     outline-offset: 2px;
   }
 }
+
+/* Tailwind's cursor-* utilities live in @layer utilities, which outranks the
+   custom cursors in @layer base. These unlayered rules beat ALL layers, so
+   elements using cursor-pointer/-text/-default (e.g. clickable images) keep
+   the classic cursors. */
+.cursor-pointer { cursor: var(--cur-pointer); }
+.cursor-text { cursor: var(--cur-text); }
+.cursor-default { cursor: var(--cur-arrow); }
 
 @utility max-w-content {
   max-width: var(--max-width-content);
@@ -92,7 +150,7 @@
   position: relative;
   background: transparent;
   border: 0;
-  cursor: pointer;
+  cursor: var(--cur-pointer);
   padding: 0 0.3rem;
   font-family: var(--font-neuebit);
   font-size: 1.6rem;
@@ -125,8 +183,18 @@
   /* Fast at the start, decelerating as it slides to the next item */
   transition:
     transform 0.55s cubic-bezier(0.16, 1, 0.3, 1),
-    width 0.55s cubic-bezier(0.16, 1, 0.3, 1),
     height 0.55s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* Zero-width anchor pinned to one vertical edge of the frame. Animating each
+   edge with transform keeps both sides composited and perfectly in sync. */
+.vt-edge {
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 100%;
+  width: 0;
+  transition: transform 0.55s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .vt-corner {
@@ -168,143 +236,6 @@
   background-repeat: no-repeat;
   background-position: top left, bottom left;
   background-size: 100% 2px, 100% 2px;
-}
-
-/* ─── TLDR CARDS ─── */
-.tldr-card {
-  position: relative;
-  /* Solid darker panel. Instead of a smooth bottom gradient, the card itself is
-     masked so its bottom edge dissolves into the page with a grainy DITHER: the
-     noise speckles punch holes straight through to the brighter page surface
-     (#0127ff), which is what makes the effect actually read. (The old
-     #001070→#00158c fade was two near-identical blues, so it looked like nothing.)
-
-     Grainy-gradient technique (css-tricks.com/grainy-gradients). Two mask layers,
-     composited with `add`:
-       1. SVG feTurbulence noise, thresholded into ~1-bit dots — opaque dots keep
-          the card, the gaps become holes that reveal the page through it.
-       2. a vertical gradient, opaque to 45% then fading out, which forces the top
-          of the card fully solid and only lets the noise punch holes toward the
-          bottom (`add` → top stays solid; bottom = noise dots only).
-     feColorMatrix lifts the noise's red channel into the alpha channel. */
-  --tldr-dither:
-    url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20width='140'%20height='140'%3E%3Cfilter%20id='d'%3E%3CfeTurbulence%20type='fractalNoise'%20baseFrequency='0.8'%20numOctaves='2'%20stitchTiles='stitch'/%3E%3CfeColorMatrix%20type='matrix'%20values='0%200%200%200%200%200%200%200%200%200%200%200%200%200%200%201%200%200%200%200'/%3E%3CfeComponentTransfer%3E%3CfeFuncA%20type='discrete'%20tableValues='0%200%201%201%201%201'/%3E%3C/feComponentTransfer%3E%3C/filter%3E%3Crect%20width='100%25'%20height='100%25'%20filter='url(%23d)'/%3E%3C/svg%3E"),
-    linear-gradient(to bottom, #000 45%, transparent 100%);
-  -webkit-mask-image: var(--tldr-dither);
-  mask-image: var(--tldr-dither);
-  -webkit-mask-size: 140px 140px, 100% 100%;
-  mask-size: 140px 140px, 100% 100%;
-  -webkit-mask-repeat: repeat, no-repeat;
-  mask-repeat: repeat, no-repeat;
-  -webkit-mask-composite: source-over; /* legacy WebKit name for `add` */
-  mask-composite: add;
-
-  background: #001070;
-  cursor: pointer;
-}
-
-/* The expanded card is a full readable dialog — no bottom dissolve there. */
-.tldr-card--expanded {
-  -webkit-mask-image: none;
-  mask-image: none;
-}
-
-/* Bridge the horizontal grid gap (1rem) so the hover frame stays lit while the
-   pointer travels to an adjacent card. Height stays exactly the card height, so
-   moving above/below leaves the hit-area and the frame turns off. The 9px (vs
-   8px half-gap) overlaps neighbours by ~1px to avoid a dead pixel at the seam. */
-.tldr-card::before {
-  content: "";
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  left: -9px;
-  right: -9px;
-}
-
-/* Hover shows corner brackets (same motif as the view toggle) — no fill/glow */
-.tldr-card__frame {
-  position: absolute;
-  inset: -2px;
-  pointer-events: none;
-  opacity: 0;
-}
-
-/* Replace the default focus outline with the corner-bracket frame so keyboard
-   focus (incl. the button regaining focus after Esc closes the card) shows the
-   same motif as hover instead of a stray white/accent border. */
-.tldr-card:focus-visible {
-  outline: none;
-}
-
-.tldr-card:not(.tldr-card--expanded):hover .tldr-card__frame,
-.tldr-card:not(.tldr-card--expanded):focus-visible .tldr-card__frame {
-  opacity: 1;
-}
-
-.tldr-card__frame .vt-corner {
-  width: 20px;
-  height: 20px;
-}
-
-.tldr-card__frame .vt-corner.tl { border-top-width: 2.5px; border-left-width: 2.5px; }
-.tldr-card__frame .vt-corner.tr { border-top-width: 2.5px; border-right-width: 2.5px; }
-.tldr-card__frame .vt-corner.bl { border-bottom-width: 2.5px; border-left-width: 2.5px; }
-.tldr-card__frame .vt-corner.br { border-bottom-width: 2.5px; border-right-width: 2.5px; }
-
-/* Grid-card body: clipped to the available height and faded to transparent at
-   the bottom so the text dissolves into the card instead of hard-truncating. */
-.tldr-card__body-fade {
-  -webkit-mask-image: linear-gradient(to bottom, #000 45%, transparent 100%);
-  mask-image: linear-gradient(to bottom, #000 45%, transparent 100%);
-}
-
-.tldr-card__icon {
-  display: inline-flex;
-  width: 2.5rem;
-  height: 2.5rem;
-}
-
-.tldr-card--expanded .tldr-card__icon {
-  width: 4.5rem;
-  height: 4.5rem;
-}
-
-.tldr-card__glyph {
-  display: block;
-  width: 100%;
-  height: 100%;
-}
-
-/* Dimmed backdrop — other cards stay visible through it */
-.tldr-overlay {
-  position: fixed;
-  inset: 0;
-  z-index: 60;
-  display: flex;
-  /* The OVERLAY is the scroll container (not the card). Centering the card with
-     margin:auto instead of align-items:center sidesteps the flexbox bug where a
-     card taller than the viewport gets clipped at the top and unreachable —
-     here a tall card anchors to the top and you scroll down to reveal the rest,
-     like a receipt. overscroll-behavior stops the wheel reaching the page. */
-  overflow-y: auto;
-  overscroll-behavior: contain;
-  padding: 6rem 1.5rem;
-  background: rgba(0, 6, 48, 0.55);
-  backdrop-filter: blur(2px);
-}
-
-.tldr-card--expanded {
-  position: relative;
-  width: min(40rem, 100%);
-  margin: auto;
-  padding: 2.75rem;
-  cursor: default;
-  /* Match the grid card's panel color so it doesn't pop to a lighter blue on
-     expand. Solid #001070 (the gradient's top stop) rather than the fade — the
-     expanded panel has no "dissolve into page" bottom edge to blend toward. */
-  background: #001070;
-  box-shadow: 0 30px 80px rgba(0, 0, 0, 0.45);
 }
 
 /* ─── SITE NAV SHELL ─── */
@@ -437,7 +368,7 @@
   padding: 0;
   color: var(--color-muted);
   opacity: 0.45;
-  cursor: pointer;
+  cursor: var(--cur-pointer);
   transition: transform 0.25s ease, color 0.15s ease, opacity 0.15s ease;
   line-height: 1;
 }
@@ -478,6 +409,7 @@
 
 .toc-link:hover {
   color: var(--color-ink-secondary);
+  transition: color 0s, border-color 0.15s;
 }
 
 .toc-link.is-section-current,
@@ -502,17 +434,59 @@
 
 /* ─── EARTH SCROLL STAGE ─── */
 
-body.is-dragging-earth {
-  cursor: grabbing;
-  user-select: none;
-}
-
-body.can-grab-earth {
-  cursor: grab;
-}
-
 #article-content.is-readable {
   pointer-events: auto;
+}
+
+/* ─── TL;DR CARD DECK ───────────────────────────────────────────────
+   Cards live in normal document flow, one after another, and you read each
+   with the page's own scroll (no pinned window → nothing clips at a line).
+   On desktop (+ motion) JS slides each finished card off-frame left with a
+   tilt as the next scrolls up. `overflow: clip` keeps that left exit from
+   ever producing a horizontal scrollbar. */
+.tldr-deck {
+  position: relative;
+  overflow: clip;
+}
+
+/* Each card is its own full section, flush with the next so they read as a
+   continuous sequence. Height is driven by content (no forced spacer). */
+.tldr-card {
+  position: relative;
+  display: flex;
+  justify-content: center;
+  padding: clamp(1rem, 2.5vh, 2rem) clamp(1.25rem, 4vw, 3.5rem);
+  will-change: transform;
+  transform-origin: 50% 50%;
+}
+
+.tldr-card__panel {
+  position: relative;
+  width: 100%;
+  max-width: 52rem;
+  background: var(--color-surface-elevated);
+  border: 1px solid var(--color-line);
+  border-radius: 18px;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.22);
+  overflow: hidden;
+}
+
+.tldr-card__bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 2.75rem;
+  padding: 0 1.5rem;
+  border-bottom: 1px solid var(--color-line-light);
+  font-family: var(--font-neuebit);
+  font-size: 0.8125rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-muted);
+}
+
+.tldr-card__body {
+  padding: clamp(1.75rem, 4vw, 3rem);
 }
 
 .earth-hero-title {

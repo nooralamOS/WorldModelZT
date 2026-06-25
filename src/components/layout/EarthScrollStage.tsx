@@ -32,9 +32,6 @@ const DEFAULT_SPEC = {
 
 const SPHERE_RADIUS = 1.0;
 const MASK_SZ = 512;
-const DRAG_SENS = 0.005;
-const MOMENTUM_FRICTION = 0.95;
-const MAX_FLING = 9.0;
 const IDLE_SPIN = 0.08;
 const INITIAL_EARTH_TILT_DEG = 12;
 const MASK_CELL = 4;        // px per pixel-cell on the 512² mask → 128×128 grid
@@ -102,6 +99,20 @@ export function EarthScrollStage({ children, nav, articlePreview, view }: { chil
     }
   }, []);
 
+  // Reload deterministically at the hero intro. The browser's default scroll
+  // restoration can drop us mid-article BEFORE ScrollTrigger has measured the
+  // pinned hero, which leaves the title's scroll-synced transform desynced —
+  // the giant title floats at viewport centre over the article. Opting out of
+  // restoration removes that race; the async init below also forces scroll 0.
+  useEffect(() => {
+    if (!('scrollRestoration' in history)) return;
+    const prev = history.scrollRestoration;
+    history.scrollRestoration = 'manual';
+    return () => {
+      history.scrollRestoration = prev;
+    };
+  }, []);
+
   // Animation spec — readable inside the Three.js effect closure via ref
   const specRef = useRef(DEFAULT_SPEC);
   const refreshScrollRef = useRef<(() => void) | null>(null);
@@ -131,6 +142,17 @@ export function EarthScrollStage({ children, nav, articlePreview, view }: { chil
       const gsap = gsapMod.default;
       gsap.registerPlugin(ScrollTrigger);
       refreshScrollRef.current = () => ScrollTrigger.refresh();
+
+      // Own resize handling entirely (see onResize below). ScrollTrigger's built-in
+      // resize auto-refresh re-derives the hero timeline from the *current* scroll
+      // against a *new* st.end — which, when the viewport grows, drops a reader back
+      // INTO the pinned hero range and re-centres the title. We instead remeasure
+      // and re-anchor the reader's article depth ourselves, so drop 'resize' here.
+      ScrollTrigger.config({ autoRefreshEvents: 'visibilitychange,DOMContentLoaded,load' });
+
+      // Correct any scroll position the browser restored before we got here, so
+      // the first measurement happens with the hero at the top of the viewport.
+      window.scrollTo(0, 0);
 
       const canvas         = canvasRef.current!;
       const heroInner      = heroInnerRef.current!;
@@ -455,8 +477,16 @@ export function EarthScrollStage({ children, nav, articlePreview, view }: { chil
         gsap.set(titleH1, { y: 0, fontSize: `${anchorFs}px` });
 
         const shrunkRect = titleH1.getBoundingClientRect();
+        // shrunkRect.top is viewport-relative, so it depends on the current
+        // scroll. `targetTop` is measured relative to #article-content, which at
+        // the docked end-state sits at the same place as #hero-inner (both at the
+        // viewport top). Measuring the title relative to #hero-inner too makes dy
+        // scroll-invariant — otherwise a rebuild while scrolled (e.g. toggling
+        // views from mid-article) bakes the scroll offset into dy and the title
+        // docks hundreds of px off, landing in the middle of the page.
+        const heroTop = heroInner.getBoundingClientRect().top;
         const dx = targetLeft - shrunkRect.left;
-        const dy = targetTop  - shrunkRect.top;
+        const dy = targetTop - (shrunkRect.top - heroTop);
 
         gsap.set(titleH1, { clearProps: 'fontSize' });
 
@@ -554,8 +584,11 @@ export function EarthScrollStage({ children, nav, articlePreview, view }: { chil
         }).scrollTrigger!
       );
 
+      const isTldr = !document.getElementById('toc-sidebar');
+
       scrollTimeline = gsap.timeline({
         scrollTrigger: {
+          id:                  'earth-hero',
           trigger:             '#scroll-stage',
           start:               'top top',
           end:                 STORY.scrollDistance,
@@ -563,6 +596,7 @@ export function EarthScrollStage({ children, nav, articlePreview, view }: { chil
           pin:                 heroInner,
           anticipatePin:       1,
           invalidateOnRefresh: true,
+          refreshPriority:     -1,
           onUpdate: () => {
             renderEarth();
             updateNavVisibility();
@@ -570,11 +604,16 @@ export function EarthScrollStage({ children, nav, articlePreview, view }: { chil
           onLeave: () => {
             scrollPastHero = true;
             articleContent.classList.add('is-readable');
+            if (isTldr) {
+              gsap.set(articleContent, { zIndex: 3 });
+              ScrollTrigger.getById('tldr-deck')?.refresh();
+            }
             updateNavVisibility();
           },
           onEnterBack: () => {
             scrollPastHero = false;
             articleContent.classList.remove('is-readable');
+            if (isTldr) gsap.set(articleContent, { zIndex: 0 });
             updateNavVisibility();
           },
         },
@@ -649,26 +688,11 @@ export function EarthScrollStage({ children, nav, articlePreview, view }: { chil
         }, 'tocIn');
       }
 
-      // TLDR cards sit in a fixed spot and simply fade in. Rather than scrub the
-      // reveal with scroll (which makes them appear to "come up"), play a real,
-      // time-based opacity fade once the title has landed (timeline ≈ 0.73), so
-      // they fade in place. The full article keeps its scrubbed slide-down reveal.
-      const isTldr = !document.getElementById('toc-sidebar');
+      // TLDR is one continuous page: the card deck lives directly beneath the
+      // title in normal flow. Keep it behind the hero layer until the globe/title
+      // story finishes so cards never paint over the title animation.
       if (isTldr) {
-        const cardFade = gsap.fromTo(articleContent,
-          { autoAlpha: 0 },
-          { autoAlpha: 1, duration: 0.6, ease: 'power2.out', paused: true },
-        );
-        // STORY.scrollDistance ('+=200%') → pin spans this many viewport heights.
-        const storyVH = parseFloat(STORY.scrollDistance.replace(/[^\d.]/g, '')) / 100;
-        scrollTriggers.push(
-          ScrollTrigger.create({
-            trigger: '#scroll-stage',
-            start: () => `top top-=${0.73 * storyVH * window.innerHeight}`,
-            onEnter: () => cardFade.play(),
-            onLeaveBack: () => cardFade.pause(0),
-          }),
-        );
+        gsap.set(articleContent, { autoAlpha: 1, zIndex: 0 });
       } else {
         scrollTimeline.fromTo(articleContent,
           { autoAlpha: 0, y: -120 },
@@ -716,15 +740,41 @@ export function EarthScrollStage({ children, nav, articlePreview, view }: { chil
       const st = scrollTimeline?.scrollTrigger;
       if (!st) return;
       const clamped = Math.min(Math.max(p, 0), 1);
-      window.scrollTo({ top: st.start + (st.end - st.start) * clamped });
+      // Land 1px past `end` when fully docked so ScrollTrigger actually crosses
+      // the boundary and fires onLeave (pin release + is-readable), rather than
+      // resting exactly on it where the pin can stay active and re-centre.
+      const extra = clamped >= 1 ? 1 : 0;
+      window.scrollTo({ top: st.start + (st.end - st.start) * clamped + extra });
       ScrollTrigger.update();
     };
 
-    // ── Raycast, paint & drag ──────────────────────────────────
+    // Rebuild the story (re-measuring against current layout) WITHOUT losing the
+    // reader's place. A viewport/font change moves `end`, so the scrubbed title
+    // transform would otherwise drift toward its un-docked (viewport-centre)
+    // resting position. We derive the reader's place from RAW scroll vs end —
+    // not from progress/scrollPastHero, which a prior refresh may already have
+    // reset — capture it BEFORE rebuilding, then re-anchor to the same place.
+    const rebuildPreservingProgress = () => {
+      const st = scrollTimeline?.scrollTrigger;
+      // Depth (px) scrolled past the hero into the article; null = hero intro.
+      const depth = st && window.scrollY >= st.end - 1 ? window.scrollY - st.end : null;
+      const heroProgress = st && depth === null ? st.progress : 0;
+
+      buildScrollStory(true);
+
+      const st2 = scrollTimeline?.scrollTrigger;
+      if (!st2) return;
+      if (depth !== null) {
+        window.scrollTo({ top: st2.end + depth + 1 });
+        ScrollTrigger.update();
+      } else if (heroProgress > 0) {
+        restoreStoryProgressRef.current?.(heroProgress);
+      }
+    };
+
+    // ── Raycast & paint (hover-only — earth is no longer draggable) ──
     const raycaster = new THREE.Raycaster();
     const mouse     = new THREE.Vector2();
-    const drag      = { active: false, lastX: 0, lastY: 0, lastT: 0, pointerId: null as number | null, vx: 0, vy: 0 };
-    const momentum  = { x: 0, y: 0 };
     let hoverUv: { u: number; v: number } | null = null;
 
     function pointerToNdc(e: PointerEvent) {
@@ -740,69 +790,17 @@ export function EarthScrollStage({ children, nav, articlePreview, view }: { chil
       return hits.find((hit) => hit.uv) ?? null;
     }
 
-    function setEarthCursor(state: 'grabbing' | 'grab' | null) {
-      document.body.classList.toggle('is-dragging-earth', state === 'grabbing');
-      document.body.classList.toggle('can-grab-earth',    state === 'grab');
-    }
-
-    function onPointerDown(e: PointerEvent) {
-      if (e.button !== 0) return;
-      pointerToNdc(e);
-      if (!raycastEarth()) return;
-      drag.active    = true;
-      drag.lastX     = e.clientX;
-      drag.lastY     = e.clientY;
-      drag.lastT     = performance.now();
-      drag.vx        = drag.vy = 0;
-      drag.pointerId = e.pointerId;
-      momentum.x     = momentum.y = 0;
-      setEarthCursor('grabbing');
-    }
-
     function onPointerMove(e: PointerEvent) {
       pointerToNdc(e);
-
-      if (drag.active && e.pointerId === drag.pointerId) {
-        const now = performance.now();
-        const dt  = Math.max(now - drag.lastT, 1) / 1000;
-        const dx  = e.clientX - drag.lastX;
-        const dy  = e.clientY - drag.lastY;
-        drag.lastX = e.clientX;
-        drag.lastY = e.clientY;
-        drag.lastT = now;
-        const ry = dx * DRAG_SENS;
-        const rx = dy * DRAG_SENS;
-        earthDrag.rotation.y += ry;
-        earthDrag.rotation.x += rx;
-        drag.vy = drag.vy * 0.6 + (ry / dt) * 0.4;
-        drag.vx = drag.vx * 0.6 + (rx / dt) * 0.4;
-        return;
-      }
-
       const hit = raycastEarth();
       hoverUv = hit?.uv ? { u: hit.uv.x, v: hit.uv.y } : null;
-      if (!drag.active) setEarthCursor(hit ? 'grab' : null);
-    }
-
-    function endDrag(e: PointerEvent) {
-      if (!drag.active || e.pointerId !== drag.pointerId) return;
-      drag.active    = false;
-      drag.pointerId = null;
-      const clamp    = (v: number) => Math.max(-MAX_FLING, Math.min(MAX_FLING, v));
-      momentum.y     = clamp(drag.vy);
-      momentum.x     = clamp(drag.vx);
-      setEarthCursor(null);
     }
 
     function onPointerLeave() {
       hoverUv = null;
-      if (!drag.active) setEarthCursor(null);
     }
 
-    window.addEventListener('pointerdown',   onPointerDown);
     window.addEventListener('pointermove',   onPointerMove);
-    window.addEventListener('pointerup',     endDrag as EventListener);
-    window.addEventListener('pointercancel', endDrag as EventListener);
     window.addEventListener('pointerleave',  onPointerLeave);
 
     // Reveal one circular dab of pixel-cells centred at mask px (mx, my).
@@ -931,23 +929,14 @@ export function EarthScrollStage({ children, nav, articlePreview, view }: { chil
     const renderFrame = () => {
       const dt = clock.getDelta();
 
-      if (!drag.active) {
-        earthDrag.rotation.y += momentum.y * dt;
-        earthDrag.rotation.x += momentum.x * dt;
-        const decay = Math.pow(MOMENTUM_FRICTION, dt * 60);
-        momentum.y *= decay;
-        momentum.x *= decay;
-        if (Math.abs(momentum.y) < 1e-4) momentum.y = 0;
-        if (Math.abs(momentum.x) < 1e-4) momentum.x = 0;
-        earthDrag.rotation.y += IDLE_SPIN * dt;
-      }
+      earthDrag.rotation.y += IDLE_SPIN * dt;
 
       const nowMs = performance.now();
       const uv = hoverUv as { u: number; v: number } | null;
-      if (uv && !drag.active) {
+      if (uv) {
         paint(uv.u, uv.v, nowMs, dt);
       } else {
-        prevMx = null; // break the trail when not hovering / while dragging
+        prevMx = null; // break the trail when not hovering
       }
       decayMask(nowMs);
       if (maskDirty) { maskTex.needsUpdate = true; maskDirty = false; }
@@ -980,6 +969,13 @@ export function EarthScrollStage({ children, nav, articlePreview, view }: { chil
       updateNavVisibility();
     });
 
+    // The title's shrink/dock target is measured from glyph metrics, so it's
+    // wrong until PP Mondwest actually loads. Re-measure when fonts are ready,
+    // preserving the reader's place so the title can't pop back to centre.
+    void document.fonts?.ready.then(() => {
+      if (alive) rebuildPreservingProgress();
+    });
+
     // ── Resize ─────────────────────────────────────────────────
     let resizeTimer: ReturnType<typeof setTimeout>;
     function onResize() {
@@ -990,7 +986,9 @@ export function EarthScrollStage({ children, nav, articlePreview, view }: { chil
         (camera as THREE.OrthographicCamera).right =  aspect * halfH;
         camera.updateProjectionMatrix();
         renderer.setSize(window.innerWidth, window.innerHeight);
-        buildScrollStory(true); // remeasure — hero is back in viewport after resize
+        // Remeasure for the new viewport, but keep the reader where they were so
+        // the docked title doesn't snap back to the centre on resize.
+        rebuildPreservingProgress();
       }, 150);
     }
     window.addEventListener('resize', onResize);
@@ -1001,17 +999,13 @@ export function EarthScrollStage({ children, nav, articlePreview, view }: { chil
       gsap.ticker.remove(renderFrame);
       clearTimeout(resizeTimer);
       killScrollStory();
-      window.removeEventListener('pointerdown',   onPointerDown);
       window.removeEventListener('pointermove',   onPointerMove);
-      window.removeEventListener('pointerup',     endDrag as EventListener);
-      window.removeEventListener('pointercancel', endDrag as EventListener);
       window.removeEventListener('pointerleave',  onPointerLeave);
       window.removeEventListener('resize',        onResize);
       disableNavScrollListener();
       ScrollTrigger.removeEventListener('refresh', onScrollTriggerRefresh);
       desktopMq.removeEventListener('change', onDesktopMqChange);
       renderer.dispose();
-      document.body.classList.remove('is-dragging-earth', 'can-grab-earth');
     };
     })();
 
@@ -1030,19 +1024,27 @@ export function EarthScrollStage({ children, nav, articlePreview, view }: { chil
       viewMountedRef.current = true;
       return;
     }
-    // Where were you in the earth animation before the swap? If you'd already
-    // scrolled past it (progress ≈ 1), restore that completed state after the
-    // rebuild instead of snapping back to the start of the animation.
-    const prevProgress = getStoryProgressRef.current?.() ?? 0;
-    // Measurement requires the hero in the viewport, so rebuild from the top…
+    // The toggle is a tab switch, not a replay of the globe intro. Rebuild from
+    // the top (measurement needs the hero in the viewport), then land in the
+    // settled reading state — title docked at the top, body shown — so the pixel
+    // blast-wave reveals the incoming page rather than the empty earth animation.
     window.scrollTo({ top: 0 });
-    const id = requestAnimationFrame(() => {
+    let raf2 = 0;
+    const raf1 = requestAnimationFrame(() => {
       rebuildStoryRef.current?.(true);
-      refreshScrollRef.current?.();
-      // …then jump to the matching progress on the freshly measured layout.
-      if (prevProgress > 0) restoreStoryProgressRef.current?.(prevProgress);
+      restoreStoryProgressRef.current?.(1);
+      // Re-assert on the next frame: the incoming view (e.g. the TL;DR deck)
+      // mounts its own ScrollTriggers a tick later, and that refresh can land
+      // the scrubbed title transform short of fully-docked. Pinning it to
+      // progress 1 again once everything has settled keeps the title at the top.
+      raf2 = requestAnimationFrame(() => {
+        restoreStoryProgressRef.current?.(1);
+      });
     });
-    return () => cancelAnimationFrame(id);
+    return () => {
+      cancelAnimationFrame(raf1);
+      cancelAnimationFrame(raf2);
+    };
   }, [view]);
 
   return (
