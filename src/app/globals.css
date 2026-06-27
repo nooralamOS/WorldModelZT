@@ -95,6 +95,15 @@
   body {
     @apply bg-surface font-sans text-ink antialiased;
     font-feature-settings: "kern" 1, "liga" 1;
+    /* Very faint, closely-packed white dot grid texture. Sits on the blue
+       surface (background-color) but beneath all content, which paints above
+       the body background. `fixed` pins it to the viewport like a texture. */
+    background-image: radial-gradient(
+      rgba(255, 255, 255, 0.09) 1px,
+      transparent 1.4px
+    );
+    background-size: 18px 18px;
+    background-attachment: fixed;
   }
 
   ::selection {
