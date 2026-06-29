@@ -44,6 +44,9 @@ const VEL_GAIN = 0.42;      // how fast the brush swells with speed
 const VEL_REF = 1.5;        // contact-point speed (mask px/ms) that maxes the brush
 const CELL_LIFE_MIN = 80;   // ms a revealed cell stays lit before fading
 const CELL_LIFE_RAND = 340; // + up to this many ms (staggered dissolve)
+const RIPPLE_MS = 1000;          // landing ripple: front pole → back pole, one pass
+const RIPPLE_HALF_WIDTH = 0.11;  // reveal-ring thickness in radians (~6.3°)
+const RIPPLE_EASE_POWER = 3;     // ease-out: fast impact, slowing toward the far pole
 const READOUT_STORAGE_KEY = 'wmzt-earth-readout-v2';
 
 const VERT_PTS = /* glsl */`
@@ -208,6 +211,36 @@ export function EarthScrollStage({ children, nav }: { children: ReactNode; nav?:
       noise: MASK_NOISE * hashNoise((i % MASK_GRID) * 0.5, Math.floor(i / MASK_GRID) * 0.5),
     }));
     const liveCells = new Set<number>();
+
+    // ── Landing-ripple geometry: each mask cell's 3D direction on the sphere ──
+    // Cell (col,row) ↔ texture uv (the same mapping paint() inverts) → the
+    // equirectangular UV→position formula (matches SphereGeometry and the
+    // equirectangular earth texture). We sweep an iso-distance ring from the
+    // front-facing point across the surface to the antipode on the far side, so
+    // selection is by 3D angle — a true geodesic ring, not a flat UV circle.
+    const cellDirX = new Float32Array(MASK_GRID * MASK_GRID);
+    const cellDirY = new Float32Array(MASK_GRID * MASK_GRID);
+    const cellDirZ = new Float32Array(MASK_GRID * MASK_GRID);
+    for (let r = 0; r < MASK_GRID; r++) {
+      for (let c = 0; c < MASK_GRID; c++) {
+        const u = (c + 0.5) / MASK_GRID;
+        const v = 1 - (r + 0.5) / MASK_GRID;
+        const phi = u * Math.PI * 2;
+        const sv = Math.sin(Math.PI * v);
+        const i = r * MASK_GRID + c;
+        cellDirX[i] = -Math.cos(phi) * sv;
+        cellDirY[i] = -Math.cos(Math.PI * v);
+        cellDirZ[i] =  Math.sin(phi) * sv;
+      }
+    }
+    let rippleStart: number | null = null;
+    let rippleThetaPrev = 0;       // last frame's ring angle → sweep fills frame gaps
+    let rippleHasPlayed = false;
+    // Reveals expose the textured earth beneath the dots, so they only "show" once
+    // the GLTF points AND the diffuse texture are decoded. Gate hover + ripple on
+    // this so an early hover doesn't just blink the dots out over an empty shell.
+    let globeReady = false;
+
     let maskDirty = false;
     let etchB = 0;                             // speed-driven brush intensity (BRUSH_MIN_FRAC → 1)
     let prevMx: number | null = null, prevMy = 0;
@@ -225,6 +258,9 @@ export function EarthScrollStage({ children, nav }: { children: ReactNode; nav?:
     const earthScroll  = new THREE.Group();
     const earthDrag    = new THREE.Group();
     const earthOrient  = new THREE.Group();
+    // Hidden until the real GLTF point-shell is loaded — never flash the plain
+    // fallback grid first (it only appears on a load error).
+    earthOrient.visible = false;
     earthDrag.rotation.x = THREE.MathUtils.degToRad(INITIAL_EARTH_TILT_DEG);
     earthDrag.add(earthOrient);
     earthScroll.add(earthDrag);
@@ -387,9 +423,15 @@ export function EarthScrollStage({ children, nav }: { children: ReactNode; nav?:
       depthWrite:  false,
     });
 
-    const fallbackPts = new THREE.Points(new THREE.SphereGeometry(SPHERE_RADIUS, 64, 32), pointsMat);
-    fallbackPts.renderOrder = 0;
-    earthOrient.add(fallbackPts);
+    // Degraded fallback: plain point-sphere so the hero is never left blank if
+    // the GLTF can't load / has no mesh. (No earth texture ⇒ no reveal, but the
+    // globe still shows.)
+    const showFallback = () => {
+      const fallbackPts = new THREE.Points(new THREE.SphereGeometry(SPHERE_RADIUS, 64, 32), pointsMat);
+      fallbackPts.renderOrder = 0;
+      earthOrient.add(fallbackPts);
+      earthOrient.visible = true;
+    };
 
     new GLTFLoader().load(
       '/earth/scene.gltf',
@@ -397,7 +439,7 @@ export function EarthScrollStage({ children, nav }: { children: ReactNode; nav?:
         let foundMesh: THREE.Mesh | null = null;
         gltf.scene.traverse((child) => { if ((child as THREE.Mesh).isMesh && !foundMesh) foundMesh = child as THREE.Mesh; });
         const mesh = foundMesh as THREE.Mesh | null;
-        if (!mesh) return;
+        if (!mesh) { showFallback(); return; }
 
         gltf.scene.updateWorldMatrix(true, true);
         const geo = mesh.geometry.clone();
@@ -412,8 +454,26 @@ export function EarthScrollStage({ children, nav }: { children: ReactNode; nav?:
         const realPts = new THREE.Points(geo, pointsMat);
         realPts.renderOrder = 0;
         earthOrient.add(realPts);
+        // Ringed shell is ready — show it now (no fallback-grid frame ever).
+        earthOrient.visible = true;
 
-        const diffuse = new THREE.TextureLoader().load('/earth/textures/Material.002_diffuse.jpeg');
+        const startRipple = () => {
+          // Texture decoded → reveals now expose the earth. Enable hover + play
+          // the one-shot landing ripple (skipped under reduced-motion).
+          globeReady = true;
+          if (!rippleHasPlayed && !reducedMotionMq.matches) {
+            rippleHasPlayed = true;
+            rippleThetaPrev = 0;
+            rippleStart = performance.now();
+          }
+        };
+
+        const diffuse = new THREE.TextureLoader().load(
+          '/earth/textures/Material.002_diffuse.jpeg',
+          startRipple,            // onLoad — earth pixels are decoded
+          undefined,
+          startRipple,            // onError — degrade gracefully, still reveal/interact
+        );
         diffuse.colorSpace = THREE.SRGBColorSpace;
         diffuse.flipY = false;
 
@@ -432,7 +492,10 @@ export function EarthScrollStage({ children, nav }: { children: ReactNode; nav?:
         earthOrient.add(earthMesh);
       },
       undefined,
-      (err) => console.warn('[EarthScrollStage] GLTF load failed — serve with next dev:', err)
+      (err) => {
+        console.warn('[EarthScrollStage] GLTF load failed — serve with next dev:', err);
+        showFallback();
+      }
     );
 
     // ── Measure earth target ("o" position) and title shrink targets ──
@@ -870,6 +933,53 @@ export function EarthScrollStage({ children, nav }: { children: ReactNode; nav?:
       }
     }
 
+    // Front-facing point's texture uv — raycast straight through the globe's
+    // projected centre (orthographic ⇒ that's the sub-camera point on the shell).
+    const _rippleNdc = new THREE.Vector3();
+    const _rippleM   = new THREE.Vector2();
+    function frontUv(): { u: number; v: number } | null {
+      if (!earthMesh) return null;
+      _rippleNdc.copy(earthScroll.position).project(camera);
+      raycaster.setFromCamera(_rippleM.set(_rippleNdc.x, _rippleNdc.y), camera);
+      const hit = raycaster.intersectObject(earthMesh, false).find((h) => h.uv);
+      return hit?.uv ? { u: hit.uv.x, v: hit.uv.y } : null;
+    }
+
+    // One-shot reveal ring: the angle from the front point sweeps 0 → π over
+    // RIPPLE_MS, so the lit band travels front pole → silhouette → back pole,
+    // healing behind it via decayMask. Same pixel cells as hover → same etch look.
+    function updateRipple(now: number) {
+      if (rippleStart === null) return;
+      const uvF = frontUv();
+      if (!uvF) { rippleStart = now; rippleThetaPrev = 0; return; } // not ready — hold at t=0
+
+      const t = (now - rippleStart) / RIPPLE_MS;
+      if (t >= 1) { rippleStart = null; return; }
+
+      const phiF = uvF.u * Math.PI * 2;
+      const svF  = Math.sin(Math.PI * uvF.v);
+      const fx = -Math.cos(phiF) * svF;
+      const fy = -Math.cos(Math.PI * uvF.v);
+      const fz =  Math.sin(phiF) * svF;
+
+      // Ease-out: angle races out on impact, then eases toward the far pole.
+      const theta = (1 - Math.pow(1 - t, RIPPLE_EASE_POWER)) * Math.PI;
+      // Reveal the whole arc swept since last frame (prevθ → θ), so the fast
+      // start (or a dropped frame) can't leap over a ring of cells.
+      const lo = Math.min(rippleThetaPrev, theta) - RIPPLE_HALF_WIDTH;
+      const hi = Math.max(rippleThetaPrev, theta) + RIPPLE_HALF_WIDTH;
+      const cosLo = Math.cos(Math.min(Math.PI, hi));   // larger angle → smaller dot
+      const cosHi = Math.cos(Math.max(0,       lo));
+      for (let i = 0; i < cellDirX.length; i++) {
+        const d = fx * cellDirX[i] + fy * cellDirY[i] + fz * cellDirZ[i];
+        if (d < cosLo || d > cosHi) continue;
+        setMaskCell(i, i % MASK_GRID, Math.floor(i / MASK_GRID), true);
+        cells[i].expiresAt = now + CELL_LIFE_MIN + CELL_LIFE_RAND * Math.random();
+        liveCells.add(i);
+      }
+      rippleThetaPrev = theta;
+    }
+
     // Hero-pinned coords — used only when sampling timeline keyframes at build time.
     function getOWorldPropsFromDOM() {
       const oRect   = oTarget.getBoundingClientRect();
@@ -934,11 +1044,12 @@ export function EarthScrollStage({ children, nav }: { children: ReactNode; nav?:
 
       const nowMs = performance.now();
       const uv = hoverUv as { u: number; v: number } | null;
-      if (uv) {
+      if (uv && globeReady) {
         paint(uv.u, uv.v, nowMs, dt);
       } else {
-        prevMx = null; // break the trail when not hovering
+        prevMx = null; // break the trail when not hovering (or before the globe is ready)
       }
+      updateRipple(nowMs);
       decayMask(nowMs);
       if (maskDirty) { maskTex.needsUpdate = true; maskDirty = false; }
 
