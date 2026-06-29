@@ -44,9 +44,13 @@ const VEL_GAIN = 0.42;      // how fast the brush swells with speed
 const VEL_REF = 1.5;        // contact-point speed (mask px/ms) that maxes the brush
 const CELL_LIFE_MIN = 80;   // ms a revealed cell stays lit before fading
 const CELL_LIFE_RAND = 340; // + up to this many ms (staggered dissolve)
-const RIPPLE_MS = 1000;          // landing ripple: front pole → back pole, one pass
+const RIPPLE_MS = 1000;          // landing ripple: launch point → its antipode, one pass
+const RIPPLE_DELAY_MS = 1000;    // beat after everything loads before the ripple plays
 const RIPPLE_HALF_WIDTH = 0.11;  // reveal-ring thickness in radians (~6.3°)
-const RIPPLE_EASE_POWER = 3;     // ease-out: fast impact, slowing toward the far pole
+const RIPPLE_EASE_POWER = 2;     // ease-out: fast impact, slowing toward the far end
+// Launch point as a screen offset from the globe centre, in disc-radius units
+// (+x right, +y up). Bottom-left ⇒ both negative; the wave sweeps to its antipode.
+const RIPPLE_ORIGIN = { x: -0.5, y: -0.5 };
 const READOUT_STORAGE_KEY = 'wmzt-earth-readout-v2';
 
 const VERT_PTS = /* glsl */`
@@ -234,8 +238,11 @@ export function EarthScrollStage({ children, nav }: { children: ReactNode; nav?:
       }
     }
     let rippleStart: number | null = null;
+    let rippleArmed = false;       // delay elapsed → capture the front point and begin
     let rippleThetaPrev = 0;       // last frame's ring angle → sweep fills frame gaps
+    let rippleFx = 0, rippleFy = 0, rippleFz = 0; // front-point dir, frozen at launch
     let rippleHasPlayed = false;
+    let rippleDelayTimer: ReturnType<typeof setTimeout> | undefined;
     // Reveals expose the textured earth beneath the dots, so they only "show" once
     // the GLTF points AND the diffuse texture are decoded. Gate hover + ripple on
     // this so an early hover doesn't just blink the dots out over an empty shell.
@@ -458,14 +465,12 @@ export function EarthScrollStage({ children, nav }: { children: ReactNode; nav?:
         earthOrient.visible = true;
 
         const startRipple = () => {
-          // Texture decoded → reveals now expose the earth. Enable hover + play
-          // the one-shot landing ripple (skipped under reduced-motion).
+          // Texture decoded → reveals now expose the earth. Enable hover, then arm
+          // the one-shot ripple a beat later so the viewer sees the globe settle
+          // first (skipped under reduced-motion).
           globeReady = true;
-          if (!rippleHasPlayed && !reducedMotionMq.matches) {
-            rippleHasPlayed = true;
-            rippleThetaPrev = 0;
-            rippleStart = performance.now();
-          }
+          if (reducedMotionMq.matches || rippleHasPlayed || rippleDelayTimer) return;
+          rippleDelayTimer = setTimeout(() => { rippleArmed = true; }, RIPPLE_DELAY_MS);
         };
 
         const diffuse = new THREE.TextureLoader().load(
@@ -933,34 +938,47 @@ export function EarthScrollStage({ children, nav }: { children: ReactNode; nav?:
       }
     }
 
-    // Front-facing point's texture uv — raycast straight through the globe's
-    // projected centre (orthographic ⇒ that's the sub-camera point on the shell).
+    // Launch point's texture uv — raycast through a screen point offset from the
+    // globe's projected centre by RIPPLE_ORIGIN (in disc-radius units), so the
+    // wave can start off-centre (e.g. bottom-left) instead of the front pole.
     const _rippleNdc = new THREE.Vector3();
     const _rippleM   = new THREE.Vector2();
-    function frontUv(): { u: number; v: number } | null {
+    function originUv(): { u: number; v: number } | null {
       if (!earthMesh) return null;
-      _rippleNdc.copy(earthScroll.position).project(camera);
-      raycaster.setFromCamera(_rippleM.set(_rippleNdc.x, _rippleNdc.y), camera);
+      _rippleNdc.copy(earthScroll.position).project(camera); // disc centre in NDC
+      const aspect = window.innerWidth / window.innerHeight;
+      const rNy = (SPHERE_RADIUS * earthScroll.scale.x) / halfH; // disc radius (NDC-y)
+      const nx = _rippleNdc.x + RIPPLE_ORIGIN.x * rNy / aspect; // x compressed by aspect
+      const ny = _rippleNdc.y + RIPPLE_ORIGIN.y * rNy;
+      raycaster.setFromCamera(_rippleM.set(nx, ny), camera);
       const hit = raycaster.intersectObject(earthMesh, false).find((h) => h.uv);
       return hit?.uv ? { u: hit.uv.x, v: hit.uv.y } : null;
     }
 
-    // One-shot reveal ring: the angle from the front point sweeps 0 → π over
-    // RIPPLE_MS, so the lit band travels front pole → silhouette → back pole,
+    // One-shot reveal ring: the angle from the launch point sweeps 0 → π over
+    // RIPPLE_MS, so the lit band travels launch point → silhouette → antipode,
     // healing behind it via decayMask. Same pixel cells as hover → same etch look.
     function updateRipple(now: number) {
-      if (rippleStart === null) return;
-      const uvF = frontUv();
-      if (!uvF) { rippleStart = now; rippleThetaPrev = 0; return; } // not ready — hold at t=0
+      // Armed (delay elapsed) but not yet launched → freeze the launch point and
+      // start the clock. Caching the direction here means the sweep can't wander
+      // to "a random point" if a later raycast flickers, and costs one raycast.
+      if (rippleStart === null) {
+        if (!rippleArmed) return;
+        const uvF = originUv();
+        if (!uvF) return; // hold until the front point is readable
+        const phiF = uvF.u * Math.PI * 2;
+        const svF  = Math.sin(Math.PI * uvF.v);
+        rippleFx = -Math.cos(phiF) * svF;
+        rippleFy = -Math.cos(Math.PI * uvF.v);
+        rippleFz =  Math.sin(phiF) * svF;
+        rippleArmed = false;
+        rippleHasPlayed = true;
+        rippleThetaPrev = 0;
+        rippleStart = now;
+      }
 
       const t = (now - rippleStart) / RIPPLE_MS;
       if (t >= 1) { rippleStart = null; return; }
-
-      const phiF = uvF.u * Math.PI * 2;
-      const svF  = Math.sin(Math.PI * uvF.v);
-      const fx = -Math.cos(phiF) * svF;
-      const fy = -Math.cos(Math.PI * uvF.v);
-      const fz =  Math.sin(phiF) * svF;
 
       // Ease-out: angle races out on impact, then eases toward the far pole.
       const theta = (1 - Math.pow(1 - t, RIPPLE_EASE_POWER)) * Math.PI;
@@ -971,7 +989,7 @@ export function EarthScrollStage({ children, nav }: { children: ReactNode; nav?:
       const cosLo = Math.cos(Math.min(Math.PI, hi));   // larger angle → smaller dot
       const cosHi = Math.cos(Math.max(0,       lo));
       for (let i = 0; i < cellDirX.length; i++) {
-        const d = fx * cellDirX[i] + fy * cellDirY[i] + fz * cellDirZ[i];
+        const d = rippleFx * cellDirX[i] + rippleFy * cellDirY[i] + rippleFz * cellDirZ[i];
         if (d < cosLo || d > cosHi) continue;
         setMaskCell(i, i % MASK_GRID, Math.floor(i / MASK_GRID), true);
         cells[i].expiresAt = now + CELL_LIFE_MIN + CELL_LIFE_RAND * Math.random();
@@ -1110,6 +1128,7 @@ export function EarthScrollStage({ children, nav }: { children: ReactNode; nav?:
       rebuildStoryRef.current = null;
       gsap.ticker.remove(renderFrame);
       clearTimeout(resizeTimer);
+      clearTimeout(rippleDelayTimer);
       killScrollStory();
       window.removeEventListener('pointermove',   onPointerMove);
       window.removeEventListener('pointerleave',  onPointerLeave);
