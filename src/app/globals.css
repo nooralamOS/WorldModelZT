@@ -98,7 +98,7 @@
        surface (background-color) but beneath all content, which paints above
        the body background. `fixed` pins it to the viewport like a texture. */
     background-image: radial-gradient(
-      rgba(255, 255, 255, 1) 1px,
+      rgba(255, 255, 255, 0.2) 1px,
       transparent 1.4px
     );
     background-size: 18px 18px;
