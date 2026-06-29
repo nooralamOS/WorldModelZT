@@ -18,20 +18,23 @@ type TableOfContentsProps = {
   items: TocItem[];
 };
 
+// Pixel-art down chevron (mirrors public/icons/down-chevron.svg). Uses
+// `currentColor` instead of the baked #B1BCFF fill so the .toc-chevron color
+// rules drive its hover / idle states like the old chevron did.
 function ChevronIcon() {
   return (
     <svg
-      viewBox="0 0 12 12"
-      width="10"
-      height="10"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.4"
-      strokeLinecap="round"
-      strokeLinejoin="round"
+      viewBox="0 0 814 489"
+      width="11 "
+      height="5"
+      fill="currentColor"
       aria-hidden="true"
     >
-      <polyline points="2.75 4.75 6 8 9.25 4.75" />
+      <rect width="162.8" height="162.8" />
+      <rect x="162.801" y="162.801" width="162.8" height="162.8" />
+      <rect x="325.601" y="325.602" width="162.8" height="162.8" />
+      <rect x="488.401" y="162.801" width="162.8" height="162.8" />
+      <rect x="651.201" width="162.8" height="162.8" />
     </svg>
   );
 }

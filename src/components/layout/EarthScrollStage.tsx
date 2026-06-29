@@ -6,23 +6,25 @@ import { createPortal } from 'react-dom';
 import 'dialkit/styles.css';
 import type * as THREE from 'three';
 
+import { LandingTocCards } from '@/components/layout/LandingTocCards';
+
 
 const STORY = {
   scrollDistance: '+=200%',
   scrub: true,
   earthMove: { at: 0, duration: 0.50, ease: 'power2.inOut' },
-  // World-space keyframes for earth (scale = earthScroll.scale / initialScale)
-  earthTune: [
-    { at: 0.56, x: -2.97, y: -0.05, scale: 0.15 },
-    { at: 0.89, x: -1.32, y:  1.18, scale: 0.07 },
-  ],
+  // Globe's landing perch on the right (xFrac/y in half-viewport world units,
+  // scale relative to initialScale) before it flies left into the title's "o".
+  earthIntro: { xFrac: 0.46, y: 0.0, scale: 1.0 },
 };
 
 // Default animation spec — DialKit sliders write into specRef at runtime
 const DEFAULT_SPEC = {
   phases: {
-    clipReveal:  { start: 0.24, end: 0.62 },
-    titleShrink: { start: 0.56, end: 0.89 },
+    titleArrive: { start: 0.00, end: 0.50 }, // title slides left→centre + grows
+    cardsFade:   { start: 0.00, end: 0.05 }, // landing ToC cards fade away
+    oFade:       { start: 0.05, end: 0.20 }, // solid "o" dissolves as globe lands
+    titleShrink: { start: 0.56, end: 0.89 }, // dock into the article header
     bodyFade:    { start: 0.71, end: 0.89 },
     tocFade:     { start: 0.84, end: 1.00 },
   },
@@ -43,10 +45,6 @@ const VEL_REF = 1.5;        // contact-point speed (mask px/ms) that maxes the b
 const CELL_LIFE_MIN = 80;   // ms a revealed cell stays lit before fading
 const CELL_LIFE_RAND = 340; // + up to this many ms (staggered dissolve)
 const READOUT_STORAGE_KEY = 'wmzt-earth-readout-v2';
-// Resting offset that tucks the title fully below the clip baseline before it's
-// revealed. Must clear the font's line-box overflow (line-height: 0.95) or the
-// glyph tops peek out. Used for the initial inline style AND every reset path.
-const TITLE_HIDDEN_Y = '130%';
 
 const VERT_PTS = /* glsl */`
   uniform float uScale;
@@ -65,7 +63,7 @@ const FRAG_PTS = /* glsl */`
     gl_FragColor = vec4(1.0, 1.0, 1.0, 1.0 - mask);
   }
 `;
-export function EarthScrollStage({ children, nav, articlePreview, view }: { children: ReactNode; nav?: ReactNode; articlePreview?: ReactNode; view?: string }) {
+export function EarthScrollStage({ children, nav }: { children: ReactNode; nav?: ReactNode }) {
   const canvasRef         = useRef<HTMLCanvasElement>(null);
   const heroInnerRef      = useRef<HTMLDivElement>(null);
   const heroVisualRef     = useRef<HTMLDivElement>(null);
@@ -74,7 +72,6 @@ export function EarthScrollStage({ children, nav, articlePreview, view }: { chil
   const oTargetRef        = useRef<HTMLSpanElement>(null);
   const scrollCueRef      = useRef<HTMLDivElement>(null);
   const articleContentRef  = useRef<HTMLDivElement>(null);
-  const articlePreviewRef  = useRef<HTMLDivElement>(null);
   const navShellRef        = useRef<HTMLDivElement>(null);
   const posReadoutRef     = useRef<HTMLSpanElement>(null);
   const [readoutOpen, setReadoutOpen] = useState(true);
@@ -117,9 +114,8 @@ export function EarthScrollStage({ children, nav, articlePreview, view }: { chil
   const specRef = useRef(DEFAULT_SPEC);
   const refreshScrollRef = useRef<(() => void) | null>(null);
   const rebuildStoryRef    = useRef<((remeasure?: boolean) => void) | null>(null);
-  // Read/restore the scroll-story progress (0→1) so a view toggle can preserve
-  // where you were instead of snapping back to the start of the earth animation.
-  const getStoryProgressRef     = useRef<(() => number) | null>(null);
+  // Restore the scroll-story progress (0→1) after a rebuild (font load / resize)
+  // so we re-anchor to the reader's place instead of snapping to the intro.
   const restoreStoryProgressRef = useRef<((p: number) => void) | null>(null);
 
   // ── DialKit disabled (imports kept) ────────────────────────
@@ -238,7 +234,7 @@ export function EarthScrollStage({ children, nav, articlePreview, view }: { chil
     let scrollTimeline: gsap.core.Timeline | null = null;
     let scrollTriggers: ScrollTrigger[] = [];
     // Cached on initial build and resize — never re-measured mid-scroll
-    let measuredTargets: { titleShrink: { dx: number; dy: number; heroFs: number; anchorFs: number }; previewTop: number; previewLeft: number } | null = null;
+    let measuredTargets: { titleShrink: { dx: number; dy: number; heroFs: number; anchorFs: number }; intro: { ix: number; iy: number; introFs: number } } | null = null;
 
     let scrollPastHero = false;
 
@@ -353,16 +349,18 @@ export function EarthScrollStage({ children, nav, articlePreview, view }: { chil
     const restoreTitleToHero = () => {
       if (titleWrap.parentElement !== heroVisual) heroVisual.appendChild(titleWrap);
 
+      // No clip-rise any more — the title slides in from the left, so the clip
+      // box must let the glyphs spill past the baseline.
       const clipEl = document.getElementById('title-clip') as HTMLElement | null;
-      if (clipEl) clipEl.style.overflow = 'hidden';
+      if (clipEl) clipEl.style.overflow = 'visible';
 
-      gsap.set(titleH1, { y: TITLE_HIDDEN_Y, clearProps: 'x,scale,fontSize' });
+      gsap.set(titleH1, { y: 0, clearProps: 'x,scale,fontSize' });
       gsap.set(titleWrap, {
         y: 0, opacity: 1, textAlign: 'center',
         clearProps: 'x,scale,margin,padding,width,position,left,top,zIndex,transformOrigin,textAlign',
       });
-      gsap.set(oTarget, { visibility: 'hidden' });
-      if (articlePreviewRef.current) gsap.set(articlePreviewRef.current, { autoAlpha: 0 });
+      // The solid "o" glyph is visible at rest and dissolves once the globe lands.
+      gsap.set(oTarget, { visibility: 'visible', opacity: 1 });
     };
 
     const initialScale = (halfH * 0.65) / SPHERE_RADIUS;
@@ -451,8 +449,6 @@ export function EarthScrollStage({ children, nav, articlePreview, view }: { chil
       let titleShrink = { dx: 0, dy: 0, heroFs: 72, anchorFs: 34 };
 
       if (heroH1) {
-        const heroH1Rect = heroH1.getBoundingClientRect();
-
         const heroFs   = parseFloat(getComputedStyle(heroH1).fontSize);
         const anchorFs = anchorEl ? parseFloat(getComputedStyle(anchorEl).fontSize) : heroFs * 0.47;
 
@@ -493,18 +489,31 @@ export function EarthScrollStage({ children, nav, articlePreview, view }: { chil
         titleShrink = { dx, dy, heroFs, anchorFs };
       }
 
-      // Measure where the O ends up after titleShrink by temporarily applying the transform
-      gsap.set(titleH1, { y: 0, fontSize: `${titleShrink.anchorFs}px` });
-      gsap.set(titleWrap, { x: titleShrink.dx, y: titleShrink.dy, clearProps: 'scale', transformOrigin: 'left top' });
-      // Measure the title's final bounding box to anchor the article preview below it
-      const titleWrapFinalRect = titleWrap.getBoundingClientRect();
-      const heroInnerRect      = heroInner.getBoundingClientRect();
-      const previewTop  = titleWrapFinalRect.bottom - heroInnerRect.top;
-      const previewLeft = titleWrapFinalRect.left   - heroInnerRect.left;
-      gsap.set(titleH1, { y: TITLE_HIDDEN_Y, clearProps: 'fontSize' });
+      // ── Intro landing transform ───────────────────────────────
+      // Where the title rests at scroll 0: smaller, parked above the ToC cards
+      // on the left. Measured against the invisible #intro-title-anchor so the
+      // live title can be translated/scaled onto it (mirror of the dock above).
+      const introAnchorEl = document.getElementById('intro-title-anchor') as HTMLElement | null;
+      let intro = { ix: 0, iy: 0, introFs: titleShrink.heroFs };
+
+      if (heroH1 && introAnchorEl) {
+        const introFs = parseFloat(getComputedStyle(introAnchorEl).fontSize);
+        gsap.set(titleH1, { y: 0, fontSize: `${introFs}px` });
+        gsap.set(titleWrap, { x: 0, y: 0, clearProps: 'scale', transformOrigin: 'left top' });
+        const titleRect  = titleH1.getBoundingClientRect();
+        const anchorRect = introAnchorEl.getBoundingClientRect();
+        intro = {
+          ix: anchorRect.left - titleRect.left,
+          iy: anchorRect.top  - titleRect.top,
+          introFs,
+        };
+        gsap.set(titleH1, { clearProps: 'fontSize' });
+      }
+
+      gsap.set(titleH1, { y: 0, clearProps: 'fontSize' });
       gsap.set(titleWrap, { x: 0, y: 0, clearProps: 'scale,transformOrigin' });
 
-      return { titleShrink, previewTop, previewLeft };
+      return { titleShrink, intro };
     }
 
     function killScrollStory() {
@@ -522,15 +531,15 @@ export function EarthScrollStage({ children, nav, articlePreview, view }: { chil
     function buildScrollStory(remeasure = true) {
       killScrollStory();
 
-      const { phases, title: titleSpec, body: bodySpec } = specRef.current;
-      const articlePreviewEl = articlePreviewRef.current;
+      const { phases, title: titleSpec } = specRef.current;
       const navEl = document.querySelector('nav[aria-label="Page sections"]') as HTMLElement | null;
+      const introCards = document.getElementById('intro-cards');
 
       // Always reset GSAP-driven state before rebuilding
       gsap.set(titleWrap,      { clearProps: 'all' });
-      gsap.set(oTarget,        { visibility: 'hidden', clearProps: 'webkitTextStrokeColor,color,webkitTextStrokeWidth' });
+      gsap.set(oTarget,        { clearProps: 'webkitTextStrokeColor,color,webkitTextStrokeWidth' });
       gsap.set(articleContent, { clearProps: 'opacity,visibility,transform' });
-      if (articlePreviewEl) gsap.set(articlePreviewEl, { clearProps: 'all' });
+      if (introCards) gsap.set(introCards, { clearProps: 'all' });
       gsap.set(document.body,  { backgroundColor: '#0127ff' });
       if (navEl) gsap.set(navEl, { backgroundColor: 'rgba(1,39,255,0.9)' });
       const shell = getNavShell();
@@ -546,31 +555,31 @@ export function EarthScrollStage({ children, nav, articlePreview, view }: { chil
       if (remeasure || !measuredTargets) {
         measuredTargets = measureEarthTargets();
       }
-      const { titleShrink, previewTop, previewLeft } = measuredTargets;
+      const { titleShrink, intro } = measuredTargets;
       const { dx, dy, heroFs, anchorFs } = titleShrink;
+      const { ix, iy, introFs } = intro;
 
-      earthScroll.position.set(0, 0, 0);
-      earthScroll.scale.setScalar(initialScale);
+      // Globe's landing perch on the right (world units) before it flies in.
+      const introAspect = window.innerWidth / window.innerHeight;
+      const introEarth = {
+        x:     halfH * introAspect * STORY.earthIntro.xFrac,
+        y:     halfH * STORY.earthIntro.y,
+        scale: initialScale * STORY.earthIntro.scale,
+      };
+      earthScroll.position.set(introEarth.x, introEarth.y, 0);
+      earthScroll.scale.setScalar(introEarth.scale);
 
-      gsap.set(titleH1, { y: TITLE_HIDDEN_Y, clearProps: 'fontSize' });
-      gsap.set(titleWrap,      { y: 0, opacity: 1 });
+      // ── Scroll-0 state ────────────────────────────────────────
+      // Title parked above the ToC cards on the left (intro transform), solid
+      // "o" showing, cards up, article hidden.
+      gsap.set(titleH1,   { y: 0, fontSize: `${introFs}px` });
+      gsap.set(titleWrap, { x: ix, y: iy, opacity: 1, transformOrigin: 'left top' });
+      gsap.set(oTarget,   { visibility: 'visible', opacity: 1 });
+      if (introCards) gsap.set(introCards, { autoAlpha: 1 });
       gsap.set(scrollCue,      { opacity: 1 });
       gsap.set(articleContent, { opacity: 0, visibility: 'hidden' });
       if (tocSidebar) gsap.set(tocSidebar, { opacity: 0 });
       articleContent.classList.remove('is-readable');
-
-      // Position the in-hero preview below the title's final landing spot
-      if (articlePreviewEl) {
-        gsap.set(articlePreviewEl, {
-          position: 'absolute',
-          top:      previewTop + bodySpec.gap,
-          left:     previewLeft,
-          right:    0,
-          opacity:  0,
-          visibility: 'hidden',
-          y: 24,
-        });
-      }
 
       scrollTriggers.push(
         gsap.to(scrollCue, {
@@ -578,13 +587,11 @@ export function EarthScrollStage({ children, nav, articlePreview, view }: { chil
           scrollTrigger: {
             trigger: '#scroll-stage',
             start:   'top top',
-            end:     '6% top',
+            end:     '3% top',
             scrub:   true,
           },
         }).scrollTrigger!
       );
-
-      const isTldr = !document.getElementById('toc-sidebar');
 
       scrollTimeline = gsap.timeline({
         scrollTrigger: {
@@ -604,31 +611,41 @@ export function EarthScrollStage({ children, nav, articlePreview, view }: { chil
           onLeave: () => {
             scrollPastHero = true;
             articleContent.classList.add('is-readable');
-            if (isTldr) {
-              gsap.set(articleContent, { zIndex: 3 });
-              ScrollTrigger.getById('tldr-deck')?.refresh();
-            }
             updateNavVisibility();
           },
           onEnterBack: () => {
             scrollPastHero = false;
             articleContent.classList.remove('is-readable');
-            if (isTldr) gsap.set(articleContent, { zIndex: 0 });
             updateNavVisibility();
           },
         },
       });
 
       scrollTimeline
-        // ── Title rises through clip baseline ─────────────────
-        .addLabel('titleReveal', phases.clipReveal.start)
-        .to(titleH1, {
-          y: '0%',
-          duration: phases.clipReveal.end - phases.clipReveal.start,
+        // ── Title slides from its left landing spot into centre + grows ──
+        .addLabel('titleArrive', phases.titleArrive.start)
+        .to(titleWrap, {
+          x: 0,
+          y: 0,
+          transformOrigin: 'left top',
+          duration: phases.titleArrive.end - phases.titleArrive.start,
           ease: 'power2.out',
           force3D: false,
-        }, 'titleReveal')
-        .set(oTarget, { visibility: 'hidden' }, 'titleReveal')
+        }, 'titleArrive')
+        .to(titleH1, {
+          fontSize: `${heroFs}px`,
+          duration: phases.titleArrive.end - phases.titleArrive.start,
+          ease: 'power2.out',
+          force3D: false,
+        }, 'titleArrive')
+
+        // ── Solid "o" dissolves as the globe settles into its slot ──
+        .to(oTarget, {
+          opacity: 0,
+          duration: phases.oFade.end - phases.oFade.start,
+          ease: 'power1.out',
+        }, phases.oFade.start)
+        .set(oTarget, { visibility: 'hidden' }, phases.oFade.end)
 
         // ── Title shrinks to article header position ──────────
         .addLabel('titleShrink', phases.titleShrink.start)
@@ -651,6 +668,15 @@ export function EarthScrollStage({ children, nav, articlePreview, view }: { chil
         .addLabel('articleIn', phases.bodyFade.start)
         .addLabel('tocIn', phases.tocFade.start);
 
+      // Landing ToC cards fade away as the title/globe converge.
+      if (introCards) {
+        scrollTimeline.to(introCards, {
+          autoAlpha: 0,
+          duration: phases.cardsFade.end - phases.cardsFade.start,
+          ease: 'power1.inOut',
+        }, phases.cardsFade.start);
+      }
+
       scrollTimeline.to(document.body, {
         backgroundColor: '#00158c',
         duration: phases.bodyFade.end - phases.bodyFade.start,
@@ -665,21 +691,6 @@ export function EarthScrollStage({ children, nav, articlePreview, view }: { chil
         }, 'articleIn');
       }
 
-      if (articlePreviewEl) {
-        // Quick fade-in, then fade out as real article takes over at 0.76
-        scrollTimeline.to(articlePreviewEl, {
-          autoAlpha: 1,
-          y: bodySpec.nudgeDy,
-          duration: 0.05,
-          ease: 'power2.out',
-        }, 'articleIn');
-        scrollTimeline.to(articlePreviewEl, {
-          autoAlpha: 0,
-          duration: 0.13,
-          ease: 'power2.in',
-        }, 0.76);
-      }
-
       if (tocSidebar) {
         scrollTimeline.to(tocSidebar, {
           opacity: 1,
@@ -688,18 +699,11 @@ export function EarthScrollStage({ children, nav, articlePreview, view }: { chil
         }, 'tocIn');
       }
 
-      // TLDR is one continuous page: the card deck lives directly beneath the
-      // title in normal flow. Keep it behind the hero layer until the globe/title
-      // story finishes so cards never paint over the title animation.
-      if (isTldr) {
-        gsap.set(articleContent, { autoAlpha: 1, zIndex: 0 });
-      } else {
-        scrollTimeline.fromTo(articleContent,
-          { autoAlpha: 0, y: -120 },
-          { autoAlpha: 1, y: 0, duration: 0.24, ease: 'power2.out' },
-          0.73,
-        );
-      }
+      scrollTimeline.fromTo(articleContent,
+        { autoAlpha: 0, y: -120 },
+        { autoAlpha: 1, y: 0, duration: 0.24, ease: 'power2.out' },
+        0.73,
+      );
 
       // Fly-in only on the timeline (0→flyEnd). After that, live DOM lock tracks the O glyph.
       const sampleEarthAtProgress = (p: number) => {
@@ -712,10 +716,10 @@ export function EarthScrollStage({ children, nav, articlePreview, view }: { chil
 
       const atFlyEnd = sampleEarthAtProgress(flyEnd);
 
-      Object.assign(earthTrack, { x: 0, y: 0, scale: initialScale });
+      Object.assign(earthTrack, introEarth);
 
       scrollTimeline
-        .set(earthTrack, { x: 0, y: 0, scale: initialScale }, 0)
+        .set(earthTrack, { x: introEarth.x, y: introEarth.y, scale: introEarth.scale }, 0)
         .to(earthTrack, {
           x: atFlyEnd.x,
           y: atFlyEnd.y,
@@ -730,9 +734,6 @@ export function EarthScrollStage({ children, nav, articlePreview, view }: { chil
     }
 
     rebuildStoryRef.current = buildScrollStory;
-
-    getStoryProgressRef.current = () =>
-      scrollTimeline?.scrollTrigger?.progress ?? (scrollPastHero ? 1 : 0);
 
     // Scroll to the position matching a 0→1 timeline progress, then sync
     // ScrollTrigger so the earth/title/content land in their final state.
@@ -1015,38 +1016,6 @@ export function EarthScrollStage({ children, nav, articlePreview, view }: { chil
     };
   }, []);
 
-  // View toggle (TLDR ⇄ Full Article) swaps the children inside #article-content.
-  // After the new content commits, reset to the top and rebuild the scroll story
-  // so the title re-measures its shrink target against the new layout.
-  const viewMountedRef = useRef(false);
-  useEffect(() => {
-    if (!viewMountedRef.current) {
-      viewMountedRef.current = true;
-      return;
-    }
-    // The toggle is a tab switch, not a replay of the globe intro. Rebuild from
-    // the top (measurement needs the hero in the viewport), then land in the
-    // settled reading state — title docked at the top, body shown — so the pixel
-    // blast-wave reveals the incoming page rather than the empty earth animation.
-    window.scrollTo({ top: 0 });
-    let raf2 = 0;
-    const raf1 = requestAnimationFrame(() => {
-      rebuildStoryRef.current?.(true);
-      restoreStoryProgressRef.current?.(1);
-      // Re-assert on the next frame: the incoming view (e.g. the TL;DR deck)
-      // mounts its own ScrollTriggers a tick later, and that refresh can land
-      // the scrubbed title transform short of fully-docked. Pinning it to
-      // progress 1 again once everything has settled keeps the title at the top.
-      raf2 = requestAnimationFrame(() => {
-        restoreStoryProgressRef.current?.(1);
-      });
-    });
-    return () => {
-      cancelAnimationFrame(raf1);
-      cancelAnimationFrame(raf2);
-    };
-  }, [view]);
-
   return (
     <>
       {nav && (
@@ -1164,18 +1133,19 @@ export function EarthScrollStage({ children, nav, articlePreview, view }: { chil
               zIndex:         1,
             }}
           >
+            {/* Landing table-of-contents cards + the title's resting anchor.
+                Positioned on the left via CSS; GSAP fades the cards out and the
+                live title slides off this anchor toward centre as you scroll. */}
+            <LandingTocCards />
+
             <div
               ref={titleWrapRef}
               id="title-wrap"
-              style={{ textAlign: 'center' }}
+              style={{ textAlign: 'center', opacity: 0 }}
             >
-              {/* overflow:hidden creates the invisible baseline — h1 rises up through it */}
-              <div id="title-clip" style={{ overflow: 'hidden', padding: '0.02em 0 0.9em' }}>
-                <h1
-                  ref={titleH1Ref}
-                  className="earth-hero-title"
-                  style={{ transform: `translateY(${TITLE_HIDDEN_Y})` }}
-                >
+              {/* Title slides in from the left — clip stays open so glyphs aren't cut. */}
+              <div id="title-clip" style={{ overflow: 'visible', padding: '0.02em 0 0.9em' }}>
+                <h1 ref={titleH1Ref} className="earth-hero-title">
                   W<span ref={oTargetRef} id="o-target">o</span>rld Model Deep-Dive
                 </h1>
               </div>
@@ -1183,26 +1153,12 @@ export function EarthScrollStage({ children, nav, articlePreview, view }: { chil
 
             <div ref={scrollCueRef} id="scroll-cue">
               <span>Scroll</span>
-              <div className="scroll-chevron" />
+              <img
+                src="/icons/down-chevron.svg"
+                alt=""
+                className="scroll-chevron"
+              />
             </div>
-
-            {articlePreview && (
-              <div
-                ref={articlePreviewRef}
-                id="article-preview"
-                style={{
-                  position:      'absolute',
-                  top:           0,
-                  left:          0,
-                  right:         0,
-                  opacity:       0,
-                  visibility:    'hidden',
-                  pointerEvents: 'none',
-                }}
-              >
-                {articlePreview}
-              </div>
-            )}
           </div>
         </div>
 

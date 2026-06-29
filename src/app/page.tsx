@@ -1,6 +1,5 @@
+import { EarthScrollStage } from "@/components/layout/EarthScrollStage";
 import { FullArticleView } from "@/components/layout/FullArticleView";
-import { HomeExperience } from "@/components/layout/HomeExperience";
-import { TldrView } from "@/components/layout/TldrView";
 
 export default function HomePage() {
   return (
@@ -13,7 +12,9 @@ export default function HomePage() {
         "--nav-item-padding-x": "0.8rem",
       } as React.CSSProperties}
     >
-      <HomeExperience tldr={<TldrView />} full={<FullArticleView />} />
+      <EarthScrollStage>
+        <FullArticleView />
+      </EarthScrollStage>
     </div>
   );
 }

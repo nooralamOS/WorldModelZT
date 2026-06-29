@@ -87,8 +87,7 @@
   dt,
   td,
   th,
-  .prose-content,
-  .tldr-card__body {
+  .prose-content {
     cursor: var(--cur-text);
   }
 
@@ -143,80 +142,6 @@
 @utility font-mondwest {
   font-family: "PP Mondwest", var(--font-display);
 }
-
-/* ─── VIEW TOGGLE (TLDR ⇄ Full Article) ─── */
-.view-toggle {
-  position: relative;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 1.75rem;
-  height: 4rem;
-  background: transparent;
-}
-
-.view-toggle__item {
-  position: relative;
-  background: transparent;
-  border: 0;
-  cursor: var(--cur-pointer);
-  padding: 0 0.3rem;
-  font-family: var(--font-neuebit);
-  font-size: 1.6rem;
-  font-weight: 600;
-  letter-spacing: 0;
-  line-height: 1;
-  color: var(--color-muted);
-  /* Hover lights up / turns off instantly; the smooth fade is applied
-     only during an actual toggle (see .is-toggling below). */
-  transition: color 0s;
-}
-
-.view-toggle__item:hover {
-  color: var(--color-ink-secondary);
-}
-
-.view-toggle__item.is-active {
-  color: var(--color-ink);
-}
-
-.view-toggle.is-toggling .view-toggle__item {
-  transition: color 0.55s cubic-bezier(0.45, 0, 0.55, 1);
-}
-
-.view-toggle__frame {
-  position: absolute;
-  top: 0;
-  left: 0;
-  pointer-events: none;
-  /* Fast at the start, decelerating as it slides to the next item */
-  transition:
-    transform 0.55s cubic-bezier(0.16, 1, 0.3, 1),
-    height 0.55s cubic-bezier(0.16, 1, 0.3, 1);
-}
-
-/* Zero-width anchor pinned to one vertical edge of the frame. Animating each
-   edge with transform keeps both sides composited and perfectly in sync. */
-.vt-edge {
-  position: absolute;
-  top: 0;
-  left: 0;
-  height: 100%;
-  width: 0;
-  transition: transform 0.55s cubic-bezier(0.16, 1, 0.3, 1);
-}
-
-.vt-corner {
-  position: absolute;
-  width: 9px;
-  height: 9px;
-  border: 0 solid var(--color-ink);
-}
-
-.vt-corner.tl { top: 0; left: 0; border-top-width: 1.5px; border-left-width: 1.5px; }
-.vt-corner.tr { top: 0; right: 0; border-top-width: 1.5px; border-right-width: 1.5px; }
-.vt-corner.bl { bottom: 0; left: 0; border-bottom-width: 1.5px; border-left-width: 1.5px; }
-.vt-corner.br { bottom: 0; right: 0; border-bottom-width: 1.5px; border-right-width: 1.5px; }
 
 /* Long-dash divider lines (browser `border-dashed` can't size dashes) */
 @utility divider-dashed-t {
@@ -447,57 +372,6 @@
   pointer-events: auto;
 }
 
-/* ─── TL;DR CARD DECK ───────────────────────────────────────────────
-   Cards live in normal document flow, one after another, and you read each
-   with the page's own scroll (no pinned window → nothing clips at a line).
-   On desktop (+ motion) JS slides each finished card off-frame left with a
-   tilt as the next scrolls up. `overflow: clip` keeps that left exit from
-   ever producing a horizontal scrollbar. */
-.tldr-deck {
-  position: relative;
-  overflow: clip;
-}
-
-/* Each card is its own full section, flush with the next so they read as a
-   continuous sequence. Height is driven by content (no forced spacer). */
-.tldr-card {
-  position: relative;
-  display: flex;
-  justify-content: center;
-  padding: clamp(1rem, 2.5vh, 2rem) clamp(1.25rem, 4vw, 3.5rem);
-  will-change: transform;
-  transform-origin: 50% 50%;
-}
-
-.tldr-card__panel {
-  position: relative;
-  width: 100%;
-  max-width: 52rem;
-  background: var(--color-surface-elevated);
-  border: 1px solid var(--color-line);
-  border-radius: 18px;
-  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.22);
-  overflow: hidden;
-}
-
-.tldr-card__bar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  height: 2.75rem;
-  padding: 0 1.5rem;
-  border-bottom: 1px solid var(--color-line-light);
-  font-family: var(--font-neuebit);
-  font-size: 0.8125rem;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--color-muted);
-}
-
-.tldr-card__body {
-  padding: clamp(1.75rem, 4vw, 3rem);
-}
-
 .earth-hero-title {
   font-size: clamp(3.5rem, 11vw, 9rem);
   line-height: 0.95;
@@ -526,25 +400,183 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 0.5rem;
-  font-size: 0.6875rem;
+  gap: 0.125rem;
+  font-family: var(--font-neuebit);
+  font-size: 0.8125rem;
   font-weight: 700;
   letter-spacing: 0.12em;
   text-transform: uppercase;
-  color: rgba(255, 255, 255, 0.45);
+  color: #b1bcff; /* matches the chevron SVG fill; opacity pulse handles dim/lit */
   pointer-events: none;
 }
 
+/* Bob + pulse the text and arrow together. They animate as children (not the
+   container) because GSAP owns #scroll-cue's transform/opacity for the scroll
+   fade-out — a CSS animation on the container would fight it. */
+#scroll-cue span,
 .scroll-chevron {
-  width: 10px;
-  height: 10px;
-  border-right: 1.5px solid rgba(255, 255, 255, 0.45);
-  border-bottom: 1.5px solid rgba(255, 255, 255, 0.45);
-  transform: rotate(45deg);
   animation: cue-bob 1.6s ease-in-out infinite;
 }
 
+.scroll-chevron {
+  width: 12px;
+  height: auto;
+}
+
 @keyframes cue-bob {
-  0%, 100% { transform: rotate(45deg) translateY(0);   opacity: 0.45; }
-  50%       { transform: rotate(45deg) translateY(4px); opacity: 0.9;  }
+  0%, 100% { transform: translateY(0);   opacity: 0.6; }
+  50%      { transform: translateY(4px); opacity: 1;   }
+}
+
+/* ─── LANDING TABLE-OF-CONTENTS CARDS ───────────────────────────────
+   The scroll-0 hero: the title's resting anchor + a 2×2 deck of section
+   cards on the left, with the globe (canvas) on the right. EarthScrollStage
+   fades #intro-cards out and slides the live title off #intro-title-anchor
+   toward centre as you scroll. Lives inside #hero-visual (pointer-events
+   none) so the cards re-enable pointer events themselves. */
+
+/* Final tuned values for the landing cards (dialed in via the now-retired
+   DialKit panel, then baked here). Heading/subheading font sizes, the whole-
+   block zoom, and the title→cards gap. */
+:root {
+  --intro-head-size: 36px;
+  --intro-item-size: 33px;
+  --intro-cards-scale: 0.6;
+  --intro-title-gap: 48px;
+}
+
+.intro-stage {
+  position: absolute;
+  inset: 0;
+  margin: 0 auto;
+  max-width: var(--max-width-content, 90rem);
+  padding: 0 clamp(1.25rem, 4vw, 3rem);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  /* Distance from the title's anchor box to the cards (--intro-title-gap). The
+     big title's glyphs spill ~14px below their 0.95 line box, so the visual gap
+     is a bit less than this value. */
+  gap: var(--intro-title-gap, 4rem);
+  pointer-events: none;
+}
+
+/* Invisible layout anchor — sets the title's landing size (introFs) and
+   reserves the slot the cards sit beneath. */
+.intro-title-anchor {
+  margin: 0;
+  font-size: clamp(2.25rem, 6vw, 5rem);
+  line-height: 0.95;
+  visibility: hidden;
+  pointer-events: none;
+  user-select: none;
+}
+
+.intro-cards {
+  display: flex;
+  gap: clamp(0.6rem, 1.1vw, 1rem);
+  /* Size to content so every card grows wide enough to hold its one-line items
+     (no wrapping). --intro-cards-scale then scales the whole block. `zoom` (not
+     transform) so the layout footprint scales too — the block truly occupies
+     less room, pulling its right edge away from the globe with no phantom
+     overflow and correct centering. */
+  width: max-content;
+  max-width: none;
+  pointer-events: auto;
+  zoom: var(--intro-cards-scale, 1);
+}
+
+.intro-cards__col {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  /* Both columns stretch to the tallest column's height (flex align-items:
+     stretch). space-between then pins the top card to the top edge and the
+     bottom card to the bottom edge, so 02 and 04 end at the same spot. The
+     min gap keeps them from touching when one column is much shorter. */
+  justify-content: space-between;
+  gap: clamp(0.6rem, 1.1vw, 1rem);
+}
+
+.intro-card {
+  border: 3px solid #060ff4; /* stroke matches the label band */
+  border-radius: 0; /* sharp corners all around */
+  /* Solid fill so the dotted page texture never shows through the card. */
+  background: #0227ff;
+  font-family: var(--font-neuebit);
+}
+
+.intro-card__head {
+  display: block;
+  /* width:0 + min-width:100% lets the heading fill the card's width (which is
+     set by the no-wrap sub-items) WITHOUT contributing to it — so a long or
+     larger heading wraps inside the card instead of stretching it wider. */
+  width: 0;
+  min-width: 100%;
+  box-sizing: border-box;
+  padding: 0.7rem 0.95rem 0.6rem;
+  background: #060ff4; /* solid label band */
+  color: var(--color-ink);
+  font-weight: 700;
+  /* --intro-head-size set in :root (final tuned value). */
+  font-size: var(--intro-head-size, clamp(1rem, 1.05vw, 1.1875rem));
+  line-height: 1.2;
+  letter-spacing: 0;
+  text-decoration: none;
+}
+
+.intro-card__list {
+  list-style: none;
+  margin: 0;
+  padding: 0.85rem 0.95rem 1rem;
+}
+
+/* Two columns sized to their own content (so nowrap items never get clipped),
+   filled top-down then across: i,ii,iii | iv,v,vi. */
+.intro-card__list.is-two-col {
+  display: grid;
+  grid-auto-flow: column;
+  grid-template-rows: repeat(3, auto);
+  column-gap: 1.75rem;
+  row-gap: 0; /* anchor padding handles vertical spacing; no dead gap to break hover */
+}
+
+.intro-card__list li {
+  margin: 0; /* spacing lives in the anchor's padding so links stay contiguous */
+  line-height: 1.25;
+}
+
+
+/* Same highlight feel as the article ToC sidebar: dim at rest, instant light-up
+   to white on hover, gentle fade-out on leave (base has the transition; :hover
+   zeroes it). --intro-item-size set in :root (final tuned value). */
+.intro-card__list a {
+  display: block; /* fill the row + absorb the gap so hover never lands on dead space */
+  padding: 0.15rem 0; /* top+bottom = the old 0.3rem li gap; adjacent links now touch */
+  color: var(--color-muted);
+  text-decoration: none;
+  font-size: var(--intro-item-size, clamp(1rem, 1vw, 1.1875rem));
+  white-space: nowrap; /* one line per item; the card grows to contain it */
+  transition: color 0.15s;
+}
+
+.intro-card__list a:hover {
+  color: var(--color-ink);
+  transition: color 0s;
+}
+
+.intro-card__num {
+  margin-right: 0.1rem;
+}
+
+/* Desktop-first: below the article's two-column breakpoint, stack the cards
+   into a single readable column so they stay usable next to the globe. */
+@media (max-width: 1059px) {
+  .intro-cards {
+    flex-direction: column;
+    max-width: 32rem;
+  }
+  .intro-card__list.is-two-col {
+    columns: 1;
+  }
 }
