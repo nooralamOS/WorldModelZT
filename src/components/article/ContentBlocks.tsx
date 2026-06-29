@@ -54,7 +54,7 @@ function BlockRenderer({ block }: { block: ContentBlock }) {
         );
       }
       return (
-        <ul className="list-disc space-y-3 pl-6 text-[1.0625rem] leading-[1.75] text-ink-secondary marker:text-accent/70">
+        <ul className="list-[square] space-y-3 pl-6 text-[1.0625rem] leading-[1.75] text-ink-secondary marker:text-accent/70">
           {block.items.map((item, i) => (
             <li key={i}>
               <ListItemContent text={item} />

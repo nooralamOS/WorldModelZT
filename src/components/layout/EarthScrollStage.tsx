@@ -15,7 +15,7 @@ const STORY = {
   earthMove: { at: 0, duration: 0.50, ease: 'power2.inOut' },
   // Globe's landing perch on the right (xFrac/y in half-viewport world units,
   // scale relative to initialScale) before it flies left into the title's "o".
-  earthIntro: { xFrac: 0.46, y: 0.0, scale: 1.0 },
+  earthIntro: { xFrac: 0.46, y: 0.0, scale: 0.75 },
 };
 
 // Default animation spec — DialKit sliders write into specRef at runtime
