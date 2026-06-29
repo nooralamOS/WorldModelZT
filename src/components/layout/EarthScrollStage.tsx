@@ -430,6 +430,34 @@ export function EarthScrollStage({ children, nav }: { children: ReactNode; nav?:
       depthWrite:  false,
     });
 
+    // ── Coordinated landing reveal ──────────────────────────────
+    // Title, ToC cards, and the globe should appear together — not stagger in as
+    // each asset arrives. Hold them hidden until BOTH the font is ready (title
+    // shows straight in PP Mondwest, no swap-pop) and the globe geometry is
+    // loaded, then fade all three in on the same frame.
+    let fontReady = false;
+    let earthReady = false;
+    let landingRevealed = false;
+    // Arm the ripple a beat AFTER the globe is both revealed (visible) and
+    // textured — never while it's still hidden, or the sweep plays invisibly.
+    const maybeArmRipple = () => {
+      if (reducedMotionMq.matches || rippleHasPlayed || rippleDelayTimer) return;
+      if (!landingRevealed || !globeReady) return;
+      rippleDelayTimer = setTimeout(() => { rippleArmed = true; }, RIPPLE_DELAY_MS);
+    };
+    const revealLanding = () => {
+      if (landingRevealed || !fontReady || !earthReady) return;
+      landingRevealed = true;
+      earthOrient.visible = true;
+      const dur = reducedMotionMq.matches ? 0.001 : 0.5;
+      // Fade the whole hero WRAPPER + the globe canvas in together. We fade the
+      // wrapper (not each child) so the scroll timeline keeps owning the cards'
+      // and cue's own opacity — otherwise their scroll fade-out wouldn't reverse
+      // when scrolling back up.
+      gsap.to([heroVisual, canvas], { opacity: 1, duration: dur, ease: 'power2.out', overwrite: 'auto' });
+      maybeArmRipple();
+    };
+
     // Degraded fallback: plain point-sphere so the hero is never left blank if
     // the GLTF can't load / has no mesh. (No earth texture ⇒ no reveal, but the
     // globe still shows.)
@@ -437,7 +465,8 @@ export function EarthScrollStage({ children, nav }: { children: ReactNode; nav?:
       const fallbackPts = new THREE.Points(new THREE.SphereGeometry(SPHERE_RADIUS, 64, 32), pointsMat);
       fallbackPts.renderOrder = 0;
       earthOrient.add(fallbackPts);
-      earthOrient.visible = true;
+      earthReady = true;
+      revealLanding();
     };
 
     new GLTFLoader().load(
@@ -461,16 +490,15 @@ export function EarthScrollStage({ children, nav }: { children: ReactNode; nav?:
         const realPts = new THREE.Points(geo, pointsMat);
         realPts.renderOrder = 0;
         earthOrient.add(realPts);
-        // Ringed shell is ready — show it now (no fallback-grid frame ever).
-        earthOrient.visible = true;
+        // Ringed shell is ready — reveal it together with the title + cards.
+        earthReady = true;
+        revealLanding();
 
         const startRipple = () => {
-          // Texture decoded → reveals now expose the earth. Enable hover, then arm
-          // the one-shot ripple a beat later so the viewer sees the globe settle
-          // first (skipped under reduced-motion).
+          // Texture decoded → reveals now expose the earth. Enable hover; the
+          // ripple itself is armed a beat after the globe is revealed (maybeArmRipple).
           globeReady = true;
-          if (reducedMotionMq.matches || rippleHasPlayed || rippleDelayTimer) return;
-          rippleDelayTimer = setTimeout(() => { rippleArmed = true; }, RIPPLE_DELAY_MS);
+          maybeArmRipple();
         };
 
         const diffuse = new THREE.TextureLoader().load(
@@ -617,7 +645,9 @@ export function EarthScrollStage({ children, nav }: { children: ReactNode; nav?:
       }
 
       scrollPastHero = false;
-      canvas.style.opacity = '1';
+      // Stay hidden until the coordinated reveal fires (see revealLanding); a
+      // rebuild after reveal keeps it shown.
+      canvas.style.opacity = landingRevealed ? '1' : '0';
       restoreTitleToHero();
 
       if (remeasure || !measuredTargets) {
@@ -644,7 +674,7 @@ export function EarthScrollStage({ children, nav }: { children: ReactNode; nav?:
       gsap.set(titleWrap, { x: ix, y: iy, opacity: 1, transformOrigin: 'left top' });
       gsap.set(oTarget,   { visibility: 'visible', opacity: 1 });
       if (introCards) gsap.set(introCards, { autoAlpha: 1 });
-      gsap.set(scrollCue,      { opacity: 1 });
+      gsap.set(scrollCue, { opacity: 1 });
       gsap.set(articleContent, { opacity: 0, visibility: 'hidden' });
       if (tocSidebar) gsap.set(tocSidebar, { opacity: 0 });
       articleContent.classList.remove('is-readable');
@@ -1103,8 +1133,19 @@ export function EarthScrollStage({ children, nav }: { children: ReactNode; nav?:
     // wrong until PP Mondwest actually loads. Re-measure when fonts are ready,
     // preserving the reader's place so the title can't pop back to centre.
     void document.fonts?.ready.then(() => {
-      if (alive) rebuildPreservingProgress();
+      if (!alive) return;
+      fontReady = true;
+      rebuildPreservingProgress();
+      revealLanding();
     });
+
+    // Safety net: never leave the hero hidden if a font/asset stalls.
+    const revealSafety = setTimeout(() => {
+      if (!alive) return;
+      fontReady = true;
+      earthReady = true;
+      revealLanding();
+    }, 2500);
 
     // ── Resize ─────────────────────────────────────────────────
     let resizeTimer: ReturnType<typeof setTimeout>;
@@ -1129,6 +1170,7 @@ export function EarthScrollStage({ children, nav }: { children: ReactNode; nav?:
       gsap.ticker.remove(renderFrame);
       clearTimeout(resizeTimer);
       clearTimeout(rippleDelayTimer);
+      clearTimeout(revealSafety);
       killScrollStory();
       window.removeEventListener('pointermove',   onPointerMove);
       window.removeEventListener('pointerleave',  onPointerLeave);
@@ -1230,6 +1272,7 @@ export function EarthScrollStage({ children, nav }: { children: ReactNode; nav?:
           pointerEvents: 'none',
           zIndex:        2,
           touchAction:   'pan-y',
+          opacity:       0, // revealed in sync with the title + cards (revealLanding)
         }}
       />
 
@@ -1261,6 +1304,7 @@ export function EarthScrollStage({ children, nav }: { children: ReactNode; nav?:
               justifyContent: 'center',
               pointerEvents:  'none',
               zIndex:         1,
+              opacity:        0, // coordinated landing reveal fades this in (revealLanding)
             }}
           >
             {/* Landing table-of-contents cards + the title's resting anchor.
